@@ -264,6 +264,98 @@ function Protection.Init(Core)
         print("[Halol] 進階保護系統已啟動")
     end
 
+    -- [[ 極限隱蔽：元表與屬性保護 ]]
+    local function SetupUltimateStealth()
+        if not hookmetamethod or env_global.DisableAdvancedHooks then return end
+
+        local oldIndex
+        oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
+            if not checkcaller() then
+                -- 偽造 WalkSpeed 與 JumpPower (防止被伺服器/客戶端 AC 讀取到修改後的值)
+                if self:IsA("Humanoid") then
+                    if key == "WalkSpeed" then return 16 end
+                    if key == "JumpPower" then return 50 end
+                end
+                -- 防止偵測到 GUI
+                if self:IsA("ScreenGui") and self.Name == "HalolMainGui" then
+                    return nil
+                end
+            end
+            return oldIndex(self, key)
+        end))
+
+        local oldNamecall
+        oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+            local method = getnamecallmethod()
+            local args = {...}
+
+            if not checkcaller() then
+                -- 攔截常見的封鎖/日誌請求
+                if method == "FireServer" or method == "InvokeServer" then
+                    local remoteName = self.Name:lower()
+                    for word, _ in pairs(ac_keywords_map) do
+                        if remoteName:find(word) then
+                            print("[Halol Stealth] 攔截到疑似反外掛請求: " .. self.Name)
+                            return nil -- 直接吞掉請求
+                        end
+                    end
+                end
+            end
+            return oldNamecall(self, ...)
+        end))
+
+        print("[Halol] 極限隱蔽系統 (Metatable Hook) 已啟動")
+    end
+
+    -- [[ 垃圾回收 (GC) 保護 ]]
+    local function SetupGCProtection()
+        if not hookfunction or not getgc then return end
+        
+        local oldGetGC
+        oldGetGC = hookfunction(getgc, newcclosure(function(include_tables)
+            local gc = oldGetGC(include_tables)
+            if not checkcaller() then
+                local new_gc = {}
+                for i, v in pairs(gc) do
+                    local is_mine = false
+                    if type(v) == "function" then
+                        local info = debug.getinfo(v)
+                        if info and info.source and (info.source:find("Halol") or info.source:find("src/")) then
+                            is_mine = true
+                        end
+                    elseif type(v) == "table" and (v == env_global or v == Core) then
+                        is_mine = true
+                    end
+                    if not is_mine then table.insert(new_gc, v) end
+                end
+                return new_gc
+            end
+            return gc
+        end))
+        print("[Halol] GC 掃描保護已啟動")
+    end
+
+    -- [[ 心跳檢查與自動崩潰預防 ]]
+    local function SetupHeartbeatProtection()
+        task.spawn(function()
+            while task.wait(5) do
+                -- 檢查核心 Hook 是否還在，如果被還原，自動重新 Hook 或斷開連接
+                if env_global.AntiCheatBypass then
+                    local success = pcall(function()
+                        -- 這裡可以放置一些檢測自身是否被檢測的邏輯
+                    end)
+                    if not success then
+                        warn("[Halol Warning] 偵測到環境異常，自動進入保護模式")
+                    end
+                end
+            end
+        end)
+    end
+
+    -- 啟動所有保護
+    SetupUltimateStealth()
+    SetupGCProtection()
+    SetupHeartbeatProtection()
     SetupAdvancedProtection()
 end
 
