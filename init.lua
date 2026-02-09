@@ -48,7 +48,7 @@ end
 
 -- [[ 更新檢查機制 ]]
 local function CheckForUpdates()
-    local baseUrl = "https://raw.githubusercontent.com/akiopz/GUN-HUB/main/"
+    local baseUrl = "https://raw.githubusercontent.com/akiopz/GUN-HUB/refs/heads/main/"
     local ok, onlineVersion = pcall(game.HttpGet, game, baseUrl .. "version.txt")
     
     if ok and onlineVersion and not onlineVersion:find("404") then
@@ -56,7 +56,7 @@ local function CheckForUpdates()
         if onlineVersion ~= CURRENT_VERSION then
             print("[Halol] 偵測到新版本: " .. onlineVersion .. " (當前: " .. CURRENT_VERSION .. ")")
             return true, onlineVersion
-        
+         
         end
     else
         print("[Halol] 無法獲取版本資訊或版本檔案不存在，跳過更新檢查。")
@@ -72,7 +72,7 @@ local function LoadModule(path)
     if ModuleCache[path] then return ModuleCache[path] end
     
     local content
-    local baseUrl = "https://raw.githubusercontent.com/akiopz/GUN-HUB/main/"
+    local baseUrl = "https://raw.githubusercontent.com/akiopz/GUN-HUB/refs/heads/main/"
     
     -- 1. 智能路徑偵測 (僅在非強制更新時)
     if not FORCE_UPDATE then
