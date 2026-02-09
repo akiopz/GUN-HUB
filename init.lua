@@ -48,7 +48,7 @@ end
 
 -- [[ 更新檢查機制 ]]
 local function CheckForUpdates()
-    local baseUrl = "https://raw.githubusercontent.com/akiopz/-ez/main/%E5%B0%84%E6%93%8A%E9%A1%9E/"
+    local baseUrl = "https://raw.githubusercontent.com/akiopz/GUN-HUB/main/"
     local ok, onlineVersion = pcall(game.HttpGet, game, baseUrl .. "version.txt")
     
     if ok and onlineVersion then
@@ -71,7 +71,7 @@ local function LoadModule(path)
     if ModuleCache[path] then return ModuleCache[path] end
     
     local content
-    local baseUrl = "https://raw.githubusercontent.com/akiopz/-ez/main/%E5%B0%84%E6%93%8A%E9%A1%9E/"
+    local baseUrl = "https://raw.githubusercontent.com/akiopz/GUN-HUB/main/"
     
     -- 1. 智能路徑偵測 (僅在非強制更新時)
     if not FORCE_UPDATE then
