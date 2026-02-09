@@ -25,6 +25,9 @@ function Combat.Init(Core)
     env_global.SilentAimEnabled = env_global.SilentAimEnabled or false
     env_global.SilentAimFOV = env_global.SilentAimFOV or 200
     env_global.SilentAimHitChance = env_global.SilentAimHitChance or 100
+    env_global.NoRecoilEnabled = env_global.NoRecoilEnabled or false
+    env_global.NoSpreadEnabled = env_global.NoSpreadEnabled or false
+    env_global.RapidFireEnabled = env_global.RapidFireEnabled or false
 
     -- [[ 註冊功能 ]]
     Core.RegisterFeature("Aimbot", {
@@ -40,6 +43,30 @@ function Combat.Init(Core)
         Category = "Combat",
         Callback = function(state)
             env_global.SilentAimEnabled = state
+        end
+    })
+
+    Core.RegisterFeature("NoRecoil", {
+        Name = "無後座力 (No Recoil)",
+        Category = "Combat",
+        Callback = function(state)
+            env_global.NoRecoilEnabled = state
+        end
+    })
+
+    Core.RegisterFeature("NoSpread", {
+        Name = "無擴散 (No Spread)",
+        Category = "Combat",
+        Callback = function(state)
+            env_global.NoSpreadEnabled = state
+        end
+    })
+
+    Core.RegisterFeature("RapidFire", {
+        Name = "快速射擊 (Rapid Fire)",
+        Category = "Combat",
+        Callback = function(state)
+            env_global.RapidFireEnabled = state
         end
     })
 

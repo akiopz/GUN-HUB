@@ -19,6 +19,8 @@ function Visuals.Init(Core)
     env_global.ShowFOV = env_global.ShowFOV or false
     env_global.AimbotFOV = env_global.AimbotFOV or 150
     env_global.ESPColor = env_global.ESPColor or Color3.fromRGB(255, 255, 255)
+    env_global.ESPHealthBar = env_global.ESPHealthBar or false
+    env_global.ESPChams = env_global.ESPChams or false
 
     -- [[ 註冊功能 ]]
     Core.RegisterFeature("ESPMain", {
@@ -42,6 +44,22 @@ function Visuals.Init(Core)
         Category = "Visuals",
         Callback = function(state)
             env_global.ESPNames = state
+        end
+    })
+
+    Core.RegisterFeature("ESPHealthBar", {
+        Name = "血量條 (Health Bar)",
+        Category = "Visuals",
+        Callback = function(state)
+            env_global.ESPHealthBar = state
+        end
+    })
+
+    Core.RegisterFeature("ESPChams", {
+        Name = "透視牆壁 (Chams)",
+        Category = "Visuals",
+        Callback = function(state)
+            env_global.ESPChams = state
         end
     })
 
@@ -84,7 +102,10 @@ function Visuals.Init(Core)
         local objects = {
             Box = Drawing.new("Square"),
             Name = Drawing.new("Text"),
-            Tracer = Drawing.new("Line")
+            Tracer = Drawing.new("Line"),
+            HealthBar = Drawing.new("Line"),
+            HealthBarBG = Drawing.new("Line"),
+            Chams = Instance.new("Highlight")
         }
         
         objects.Box.Thickness = 1
@@ -98,6 +119,16 @@ function Visuals.Init(Core)
         
         objects.Tracer.Thickness = 1
         objects.Tracer.Color = env_global.ESPColor
+
+        objects.HealthBar.Thickness = 2
+        objects.HealthBarBG.Thickness = 2
+        objects.HealthBarBG.Color = Color3.new(0, 0, 0)
+        
+        objects.Chams.Name = "HalolChams"
+        objects.Chams.FillColor = env_global.ESPColor
+        objects.Chams.FillTransparency = 0.5
+        objects.Chams.OutlineColor = Color3.new(1, 1, 1)
+        objects.Chams.Enabled = false
         
         ESP_Objects[player] = objects
     end
@@ -105,7 +136,11 @@ function Visuals.Init(Core)
     local function RemoveESP(player)
         if ESP_Objects[player] then
             for _, obj in pairs(ESP_Objects[player]) do
-                obj:Remove()
+                if typeof(obj) == "Instance" then
+                    obj:Destroy()
+                else
+                    obj:Remove()
+                end
             end
             ESP_Objects[player] = nil
         end
@@ -131,33 +166,54 @@ function Visuals.Init(Core)
                         local sizeY = math.abs(pos.Y - headPos.Y) * 3
                         local sizeX = sizeY * 0.6
                         
-                        if env_global.ESPBoxes then
-                            objects.Box.Size = Vector2.new(sizeX, sizeY)
-                            objects.Box.Position = Vector2.new(pos.X - sizeX/2, pos.Y - sizeY/2)
-                            objects.Box.Visible = true
+                        -- 更新 Box
+                        objects.Box.Size = Vector2.new(sizeX, sizeY)
+                        objects.Box.Position = Vector2.new(pos.X - sizeX/2, pos.Y - sizeY/2)
+                        objects.Box.Visible = env_global.ESPBoxes
+                        
+                        -- 更新 Name
+                        objects.Name.Text = player.Name
+                        objects.Name.Position = Vector2.new(pos.X, pos.Y - sizeY/2 - 15)
+                        objects.Name.Visible = env_global.ESPNames
+                        
+                        -- 更新 Health Bar
+                        if env_global.ESPHealthBar then
+                            local healthPercent = hum.Health / hum.MaxHealth
+                            local barHeight = sizeY
+                            local barPos = Vector2.new(pos.X - sizeX/2 - 5, pos.Y + sizeY/2)
+                            
+                            objects.HealthBarBG.From = barPos
+                            objects.HealthBarBG.To = barPos - Vector2.new(0, barHeight)
+                            objects.HealthBarBG.Visible = true
+                            
+                            objects.HealthBar.From = barPos
+                            objects.HealthBar.To = barPos - Vector2.new(0, barHeight * healthPercent)
+                            objects.HealthBar.Color = Color3.fromHSV(healthPercent * 0.3, 1, 1)
+                            objects.HealthBar.Visible = true
                         else
-                            objects.Box.Visible = false
+                            objects.HealthBar.Visible = false
+                            objects.HealthBarBG.Visible = false
                         end
                         
-                        if env_global.ESPNames then
-                            objects.Name.Text = player.Name
-                            objects.Name.Position = Vector2.new(pos.X, pos.Y - sizeY/2 - 15)
-                            objects.Name.Visible = true
+                        -- 更新 Chams
+                        if env_global.ESPChams then
+                            objects.Chams.Parent = char
+                            objects.Chams.Enabled = true
                         else
-                            objects.Name.Visible = false
+                            objects.Chams.Enabled = false
                         end
                         
-                        objects.Tracer.Visible = false -- 預設關閉
                         visible = true
                     end
                 end
             end
             
-            -- 如果不可見或不符合條件，隱藏所有物件
             if not visible then
-                for _, obj in pairs(objects) do
-                    obj.Visible = false
-                end
+                objects.Box.Visible = false
+                objects.Name.Visible = false
+                objects.HealthBar.Visible = false
+                objects.HealthBarBG.Visible = false
+                objects.Chams.Enabled = false
             end
         end
     end

@@ -16,7 +16,34 @@ function Protection.Init(Core)
     local getnamecallmethod = Core.getnamecallmethod
     local gethui = Core.gethui
 
-    -- [[ 核心偵測判斷優化 ]]
+    env_global.AntiCheatBypass = env_global.AntiCheatBypass or false
+    env_global.AntiSpectate = env_global.AntiSpectate or false
+    env_global.FakeName = env_global.FakeName or false
+
+    -- [[ 註冊功能 ]]
+    Core.RegisterFeature("AntiCheatBypass", {
+        Name = "防偵測繞過 (AC Bypass)",
+        Category = "Protection",
+        Callback = function(state)
+            env_global.AntiCheatBypass = state
+        end
+    })
+
+    Core.RegisterFeature("AntiSpectate", {
+        Name = "反觀戰 (Anti-Spectate)",
+        Category = "Protection",
+        Callback = function(state)
+            env_global.AntiSpectate = state
+        end
+    })
+
+    Core.RegisterFeature("FakeName", {
+        Name = "偽造名字 (Fake Name)",
+        Category = "Protection",
+        Callback = function(state)
+            env_global.FakeName = state
+        end
+    })
     local ac_keywords_map = {}
     local ac_keywords_list = {
         "Anticheat", "Adonis", "Sentinel", "AC", "Detection", "Flag", "Log",
@@ -48,7 +75,22 @@ function Protection.Init(Core)
         return true
     end
 
-    -- [[ 極限隱蔽：掃描保護 ]]
+    -- [[ 反觀戰邏輯 ]]
+    task.spawn(function()
+        while task.wait(1) do
+            if env_global.AntiSpectate then
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if player ~= lp and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                        -- 如果有玩家距離太近且視角正對著我，可能是觀戰或錄影
+                        local dist = (player.Character.HumanoidRootPart.Position - lp.Character.HumanoidRootPart.Position).Magnitude
+                        if dist < 10 then
+                            Core.Notify("反觀戰警報", player.Name .. " 正在貼身觀察你！", 3)
+                        end
+                    end
+                end
+            end
+        end
+    end)
     local function SetupStealthProtection()
         if not hookfunction or env_global.DisableAggressiveProtection then return end
 

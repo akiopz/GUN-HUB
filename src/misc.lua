@@ -15,6 +15,8 @@ function Misc.Init(Core)
     env_global.JumpPowerMultiplier = env_global.JumpPowerMultiplier or 1
     env_global.InfJumpEnabled = env_global.InfJumpEnabled or false
     env_global.NoClipEnabled = env_global.NoClipEnabled or false
+    env_global.FlyEnabled = env_global.FlyEnabled or false
+    env_global.FlySpeed = env_global.FlySpeed or 50
 
     -- [[ 註冊功能 ]]
     Core.RegisterFeature("InfJump", {
@@ -30,6 +32,22 @@ function Misc.Init(Core)
         Category = "Misc",
         Callback = function(state)
             env_global.NoClipEnabled = state
+        end
+    })
+
+    Core.RegisterFeature("Fly", {
+        Name = "飛行模式 (Fly)",
+        Category = "Misc",
+        Callback = function(state)
+            env_global.FlyEnabled = state
+        end
+    })
+
+    Core.RegisterFeature("SpeedBoost", {
+        Name = "速度加強 (Speed Boost)",
+        Category = "Misc",
+        Callback = function(state)
+            env_global.WalkSpeedMultiplier = state and 2 or 1
         end
     })
 
@@ -51,6 +69,7 @@ function Misc.Init(Core)
     RunService.Stepped:Connect(function()
         local char = lp.Character
         local hum = char and char:FindFirstChildOfClass("Humanoid")
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
         
         if hum then
             -- Speed 優化：僅在需要時設定
@@ -66,6 +85,19 @@ function Misc.Init(Core)
                         part.CanCollide = false
                     end
                 end
+            end
+
+            -- Fly 功能
+            if env_global.FlyEnabled and hrp then
+                local moveDir = hum.MoveDirection
+                local cameraCF = workspace.CurrentCamera.CFrame
+                local flyVel = Vector3.new(0, 0, 0)
+                
+                if moveDir.Magnitude > 0 then
+                    flyVel = (cameraCF.LookVector * moveDir.Z + cameraCF.RightVector * moveDir.X) * env_global.FlySpeed
+                end
+                
+                hrp.Velocity = flyVel + Vector3.new(0, 0.5, 0) -- 抵消重力
             end
         end
     end)
