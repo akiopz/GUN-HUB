@@ -31,8 +31,47 @@ function Combat.Init(Core)
     env_global.KillAllEnabled = env_global.KillAllEnabled or false
     env_global.HitboxExpanderEnabled = env_global.HitboxExpanderEnabled or false
     env_global.HitboxSize = env_global.HitboxSize or 5
+    env_global.SpinbotEnabled = env_global.SpinbotEnabled or false
+    env_global.SpinbotSpeed = env_global.SpinbotSpeed or 50
+    env_global.AntiAimEnabled = env_global.AntiAimEnabled or false
+    env_global.AntiAimMode = env_global.AntiAimMode or "Jitter" -- "Jitter", "Spin", "Backwards"
+    env_global.TeleportKillEnabled = env_global.TeleportKillEnabled or false
+    env_global.InstaKillEnabled = env_global.InstaKillEnabled or false
+    env_global.ShieldEnabled = env_global.ShieldEnabled or false
 
     -- [[ 註冊功能 ]]
+    Core.RegisterFeature("TeleportKill", {
+        Name = "傳送殺敵 (TP Kill)",
+        Category = "Rage",
+        Callback = function(state)
+            env_global.TeleportKillEnabled = state
+        end
+    })
+
+    Core.RegisterFeature("InstaKill", {
+        Name = "秒殺模式 (Insta Kill)",
+        Category = "Rage",
+        Callback = function(state)
+            env_global.InstaKillEnabled = state
+        end
+    })
+
+    Core.RegisterFeature("Spinbot", {
+        Name = "大陀螺 (Spinbot)",
+        Category = "Rage",
+        Callback = function(state)
+            env_global.SpinbotEnabled = state
+        end
+    })
+
+    Core.RegisterFeature("AntiAim", {
+        Name = "反自瞄 (Anti-Aim)",
+        Category = "Rage",
+        Callback = function(state)
+            env_global.AntiAimEnabled = state
+        end
+    })
+
     Core.RegisterFeature("SilentAim", {
         Name = "靜默瞄準 (Silent Aim)",
         Category = "Rage",
@@ -188,6 +227,51 @@ function Combat.Init(Core)
                 Camera.CFrame = currentCF:Lerp(targetCF, env_global.AimbotSmoothness)
             else
                 Camera.CFrame = targetCF
+            end
+        end
+    end)
+
+    -- [[ Rage 循環: TP Kill ]]
+    task.spawn(function()
+        while task.wait(0.1) do
+            if env_global.TeleportKillEnabled then
+                local target = Combat.GetNearestEnemy()
+                if target and target.Parent then
+                    local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+                    if hrp then
+                        -- 傳送到目標背後
+                        hrp.CFrame = target.CFrame * CFrame.new(0, 0, 3)
+                    end
+                end
+            end
+        end
+    end)
+
+    -- [[ Rage 循環: Spinbot & Anti-Aim ]]
+    local rageAngle = 0
+    RunService.Heartbeat:Connect(function()
+        local char = lp.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+
+        -- 大陀螺邏輯
+        if env_global.SpinbotEnabled then
+            rageAngle = (rageAngle + env_global.SpinbotSpeed) % 360
+            hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(env_global.SpinbotSpeed), 0)
+        end
+
+        -- 反自瞄邏輯
+        if env_global.AntiAimEnabled then
+            if env_global.AntiAimMode == "Jitter" then
+                -- 快速抖動角度
+                local jitter = math.random(-180, 180)
+                hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(jitter), 0)
+            elseif env_global.AntiAimMode == "Spin" then
+                -- 獨立於 Spinbot 的旋轉
+                hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(25), 0)
+            elseif env_global.AntiAimMode == "Backwards" then
+                -- 始終背對
+                hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(180), 0)
             end
         end
     end)
