@@ -5,7 +5,7 @@
 -- [[ 啟動最前端：立即回饋 ]]
 print("========================================")
 print("[Halol] 偵測到執行指令，正在初始化...")
-local CURRENT_VERSION = "1.0.3"
+local CURRENT_VERSION = "1.0.4"
 
 pcall(function()
     game:GetService("StarterGui"):SetCore("SendNotification", {
@@ -48,7 +48,7 @@ end
 
 -- [[ 更新檢查機制 ]]
 local function CheckForUpdates()
-    local baseUrl = "https://raw.githubusercontent.com/akiopz/-ez/main/%E5%B0%84%E6%93%8A%E9%A1%9E/"
+    local baseUrl = "https://raw.githubusercontent.com/akiopz/GUN-HUB/main/"
     local ok, onlineVersion = pcall(game.HttpGet, game, baseUrl .. "version.txt")
     
     if ok and onlineVersion and not onlineVersion:find("404") then
@@ -56,6 +56,7 @@ local function CheckForUpdates()
         if onlineVersion ~= CURRENT_VERSION then
             print("[Halol] 偵測到新版本: " .. onlineVersion .. " (當前: " .. CURRENT_VERSION .. ")")
             return true, onlineVersion
+        
         end
     else
         print("[Halol] 無法獲取版本資訊或版本檔案不存在，跳過更新檢查。")
@@ -71,7 +72,7 @@ local function LoadModule(path)
     if ModuleCache[path] then return ModuleCache[path] end
     
     local content
-    local baseUrl = "https://raw.githubusercontent.com/akiopz/-ez/main/%E5%B0%84%E6%93%8A%E9%A1%9E/"
+    local baseUrl = "https://raw.githubusercontent.com/akiopz/GUN-HUB/main/"
     
     -- 1. 智能路徑偵測 (僅在非強制更新時)
     if not FORCE_UPDATE then
