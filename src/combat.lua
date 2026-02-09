@@ -15,6 +15,34 @@ function Combat.Init(Core)
 
     -- [[ 預設配置 ]]
     env_global.AimbotEnabled = env_global.AimbotEnabled or false
+    env_global.AimbotQuickSwitch = env_global.AimbotQuickSwitch or false
+    
+    -- [[ 槍枝偵測邏輯 ]]
+    local function GetCurrentWeapon()
+        local char = lp.Character
+        if not char then return nil end
+        return char:FindFirstChildOfClass("Tool")
+    end
+
+    local function IsSniper(weapon)
+        if not weapon then return false end
+        local name = weapon.Name:lower()
+        -- 常見狙擊槍關鍵字
+        return name:find("sniper") or name:find("awp") or name:find("remington") or name:find("scout") or name:find("rifle")
+    end
+
+    local function QuickSwitch()
+        local char = lp.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        local weapon = GetCurrentWeapon()
+        
+        if hum and weapon then
+            -- 執行快切：卸下再裝備，繞過狙擊槍射擊間隔
+            hum:UnequipTools()
+            task.wait(0.05)
+            hum:EquipTool(weapon)
+        end
+    end
     env_global.AimbotSmoothness = env_global.AimbotSmoothness or 0.15
     env_global.AimbotFOV = env_global.AimbotFOV or 150
     env_global.AimbotTargetPart = env_global.AimbotTargetPart or "Head"
@@ -116,6 +144,15 @@ function Combat.Init(Core)
         Category = "Combat",
         Callback = function(state)
             env_global.AimbotEnabled = state
+        
+        end
+    })
+
+    Core.RegisterFeature("AimbotQuickSwitch", {
+        Name = "狙擊自動快切 (Quick Switch)",
+        Category = "Combat",
+        Callback = function(state)
+            env_global.AimbotQuickSwitch = state
         end
     })
 
@@ -307,6 +344,17 @@ function Combat.Init(Core)
                 
                 -- 通用 Remote 繞過 (防止行為檢測)
                 if method == "FireServer" or method == "InvokeServer" then
+                    -- 檢查是否為狙擊槍快切
+                    if env_global.AimbotQuickSwitch then
+                        local weapon = GetCurrentWeapon()
+                        if IsSniper(weapon) then
+                            task.spawn(function()
+                                task.wait(0.05) -- 等待射擊包發送完成
+                                QuickSwitch()
+                            end)
+                        end
+                    end
+
                     local remoteName = self.Name:lower()
                     if remoteName:find("check") or remoteName:find("detect") or remoteName:find("verify") then
                         return -- 吞掉所有疑似檢查的請求
