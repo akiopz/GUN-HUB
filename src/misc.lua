@@ -87,7 +87,15 @@ function Misc.Init(Core)
     lp.CharacterAdded:Connect(UpdateCharParts)
     UpdateCharParts(lp.Character)
 
+    -- [[ 性能優化：頻率控制與快取 ]]
+    local lastHeartbeat = 0
+    local MOVEMENT_INTERVAL = 0.005 -- 約 200Hz，保持極高流暢度但減少運算
+
     RunService.Heartbeat:Connect(function(dt)
+        local now = tick()
+        if now - lastHeartbeat < MOVEMENT_INTERVAL then return end
+        lastHeartbeat = now
+        
         local char = lp.Character
         local hum = char and char:FindFirstChildOfClass("Humanoid")
         local hrp = char and char:FindFirstChild("HumanoidRootPart")

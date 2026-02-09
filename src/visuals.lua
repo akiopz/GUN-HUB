@@ -217,7 +217,15 @@ function Visuals.Init(Core)
         end
     end
 
+    -- [[ 性能優化：頻率控制 ]]
+    local lastUpdate = 0
+    local UPDATE_INTERVAL = 0.01 -- 限制每秒最多更新 100 次，減少渲染負擔
+
     local function UpdateESP()
+        local now = tick()
+        if now - lastUpdate < UPDATE_INTERVAL then return end
+        lastUpdate = now
+        
         for player, objects in pairs(ESP_Objects) do
             local char = player.Character
             local isTeammate = (player.Team == lp.Team and player.Team ~= nil)

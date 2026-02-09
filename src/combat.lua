@@ -135,26 +135,44 @@ function Combat.Init(Core)
         end
     })
 
-    -- [[ 優化物件快取 ]]
+    -- [[ 性能優化：Raycast 快取 ]]
+    local raycastCache = {}
+    local RAYCAST_INTERVAL = 0.05 -- 每秒最多 20 次 Raycast，節省 CPU
     local raycastParams = RaycastParams.new()
     raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-    
+
     local function IsVisible(part, character)
         if not env_global.AimbotVisibilityCheck then return true end
-        if not character then return false end
-        
+        if not part or not character then return false end
+
+        local now = tick()
+        local cacheKey = part:GetDebugId()
+
+        -- 如果快取在有效期內，直接返回
+        if raycastCache[cacheKey] and (now - raycastCache[cacheKey].time) < RAYCAST_INTERVAL then
+            return raycastCache[cacheKey].visible
+        end
+
         local origin = Camera.CFrame.Position
         local destination = part.Position
         local direction = (destination - origin)
-        
+
         raycastParams.FilterDescendantsInstances = {character, Camera, workspace:FindFirstChild("Terrain")}
-        
+
         local result = workspace:Raycast(origin, direction, raycastParams)
+        local isVisible = true
         if result then
             local hit = result.Instance
-            return hit:IsDescendantOf(part.Parent) or hit.Transparency > 0.8 or not hit.CanCollide
+            isVisible = hit:IsDescendantOf(part.Parent) or hit.Transparency > 0.8 or not hit.CanCollide
         end
-        return true
+
+        -- 更新快取
+        raycastCache[cacheKey] = {
+            visible = isVisible,
+            time = now
+        }
+
+        return isVisible
     end
 
     function Combat.GetNearestEnemy()
