@@ -517,9 +517,10 @@ function Combat.Init(Core)
                     -- 傷害增加 (Damage Multiplier)
                     if env_global.DamageMultiplierEnabled then
                         if remoteName:find("damage") or remoteName:find("hit") or remoteName:find("weapon") then
+                            local multiplier = tonumber(env_global.DamageMultiplier) or 1
                             for i, v in ipairs(args) do
                                 if type(v) == "number" and v > 0 then
-                                    args[i] = v * env_global.DamageMultiplier
+                                    args[i] = v * multiplier
                                 end
                             end
                             return oldNamecall(self, unpack(args))
@@ -570,14 +571,15 @@ function Combat.Init(Core)
                                 local direction = (targetPos - origin).Unit * 15000 -- 極大化射程
                                 newArgs[2] = direction
                                 
-                                -- 爆擊與傷害加倍
+                            -- 爆擊與傷害加倍
                                 if env_global.BulletCritical then
                                     newArgs[3] = 100 -- 假設參數 3 是爆擊率
                                 end
                                 
                                 if env_global.DamageMultiplierEnabled then
                                     task.spawn(function()
-                                        for i = 1, env_global.DamageMultiplier do
+                                        local multiplier = tonumber(env_global.DamageMultiplier) or 1
+                                        for i = 1, multiplier do
                                             self[method](self, unpack(newArgs))
                                         end
                                     end)

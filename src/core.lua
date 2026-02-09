@@ -85,6 +85,10 @@ end
 
 -- 安全執行包裹 (含自動通知)
 function Core.SafeExecute(name, func, ...)
+    if type(func) ~= "function" then
+        warn("[Halol Error] Attempted to execute non-function: " .. tostring(name))
+        return false, "Not a function"
+    end
     local success, result = pcall(func, ...)
     if not success then
         local errMsg = tostring(result)
@@ -236,8 +240,12 @@ function Core.CreateGUI()
 
     -- 分類按鈕與過濾邏輯
     local function RefreshFeatures(category)
+        if not FeatureList then return end
         for _, child in ipairs(FeatureList:GetChildren()) do
-            if child:IsA("Frame") then child.Visible = (category == "All" or child:GetAttribute("Category") == category) end
+            if child:IsA("Frame") then 
+                local featCat = child:GetAttribute("Category")
+                child.Visible = (category == "All" or featCat == category) 
+            end
         end
     end
 
@@ -302,9 +310,13 @@ function Core.CreateGUI()
         toggle.TextSize = 10
 
         toggle.MouseButton1Click:Connect(function()
-            local newState = Core.ToggleFeature(id)
-            toggle.BackgroundColor3 = newState and Color3.fromRGB(0, 200, 100) or Color3.fromRGB(200, 50, 50)
-            toggle.Text = newState and "ON" or "OFF"
+            local success, newState = pcall(function() return Core.ToggleFeature(id) end)
+            if success then
+                toggle.BackgroundColor3 = newState and Color3.fromRGB(0, 200, 100) or Color3.fromRGB(200, 50, 50)
+                toggle.Text = newState and "ON" or "OFF"
+            else
+                warn("[Halol UI Error] Failed to toggle feature: " .. tostring(id))
+            end
         end)
 
         FeatureList.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y)
