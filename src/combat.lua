@@ -809,9 +809,15 @@ function Combat.Init(Core)
                 if weapon then
                     local remote = weapon:FindFirstChild("RemoteEvent") or weapon:FindFirstChildOfClass("RemoteEvent") or weapon:FindFirstChild("Fire")
                     if remote then
-                        -- 如果是魔法子彈，直接打頭，否則打當前瞄準點
-                        local shotPos = env_global.MagicBullet and target.Position or targetPos
-                        remote:FireServer(shotPos)
+                        -- 修正：在大陀螺或靜默自瞄時，確保射擊方向正確重定向
+                        local targetPos = target.Position
+                        
+                        -- 如果有暴力模式，自動打頭
+                        if env_global.AimbotRageMode then
+                            targetPos = target.Position
+                        end
+                        
+                        remote:FireServer(targetPos)
                     end
                 end
             end
@@ -846,7 +852,8 @@ function Combat.Init(Core)
         -- 大陀螺邏輯
         if env_global.SpinbotEnabled then
             rageAngle = (rageAngle + env_global.SpinbotSpeed) % 360
-            hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(env_global.SpinbotSpeed), 0)
+            -- 優化：僅旋轉角色外觀，不影響相機方向，確保自瞄能正常運作
+            hrp.CFrame = CFrame.new(hrp.Position) * CFrame.Angles(0, math.rad(rageAngle), 0)
         end
 
         -- 反自瞄邏輯
