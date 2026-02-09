@@ -128,6 +128,8 @@ end
 
 -- [[ 功能註冊系統 (為 UI 做準備) ]]
 Core.Features = {}
+Core.Categories = {"Combat", "Visuals", "Misc", "Protection"}
+
 function Core.RegisterFeature(id, info)
     Core.Features[id] = {
         Name = info.Name or id,
@@ -136,6 +138,10 @@ function Core.RegisterFeature(id, info)
         Callback = info.Callback,
         Enabled = false
     }
+    -- 如果 GUI 已經存在，則更新 GUI (這部分待會實現)
+    if Core.UI and Core.UI.AddFeature then
+        Core.UI.AddFeature(id, Core.Features[id])
+    end
     print("[Halol] 功能已註冊: " .. id)
 end
 
@@ -149,6 +155,137 @@ function Core.ToggleFeature(id, state)
         return feature.Enabled
     end
     return false
+end
+
+-- [[ GUI 核心系統 ]]
+function Core.CreateGUI()
+    if Core.MainGui then Core.MainGui:Destroy() end
+
+    local ScreenGui = Instance.new("ScreenGui")
+    local MainFrame = Instance.new("Frame")
+    local Title = Instance.new("TextLabel")
+    local TabContainer = Instance.new("Frame")
+    local FeatureList = Instance.new("ScrollingFrame")
+    local UIListLayout = Instance.new("UIListLayout")
+
+    ScreenGui.Name = "HalolMainGui"
+    ScreenGui.Parent = Core.gethui()
+    ScreenGui.ResetOnSpawn = false
+
+    MainFrame.Name = "MainFrame"
+    MainFrame.Parent = ScreenGui
+    MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+    MainFrame.BorderSizePixel = 0
+    MainFrame.Position = UDim2.new(0.5, -200, 0.5, -150)
+    MainFrame.Size = UDim2.new(0, 400, 0, 300)
+    MainFrame.Active = true
+    MainFrame.Draggable = true
+
+    Title.Name = "Title"
+    Title.Parent = MainFrame
+    Title.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+    Title.Size = UDim2.new(1, 0, 0, 30)
+    Title.Font = Enum.Font.GothamBold
+    Title.Text = "  Halol GUN-HUB v1.0.3"
+    Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Title.TextSize = 14
+    Title.TextXAlignment = Enum.TextXAlignment.Left
+
+    TabContainer.Name = "TabContainer"
+    TabContainer.Parent = MainFrame
+    TabContainer.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+    TabContainer.Position = UDim2.new(0, 0, 0, 30)
+    TabContainer.Size = UDim2.new(0, 100, 1, -30)
+
+    FeatureList.Name = "FeatureList"
+    FeatureList.Parent = MainFrame
+    FeatureList.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+    FeatureList.Position = UDim2.new(0, 105, 0, 35)
+    FeatureList.Size = UDim2.new(1, -110, 1, -40)
+    FeatureList.ScrollBarThickness = 2
+    FeatureList.CanvasSize = UDim2.new(0, 0, 0, 0)
+
+    UIListLayout.Parent = FeatureList
+    UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    UIListLayout.Padding = UDim.new(0, 5)
+
+    -- 分類按鈕與過濾邏輯
+    local function RefreshFeatures(category)
+        for _, child in ipairs(FeatureList:GetChildren()) do
+            if child:IsA("Frame") then child.Visible = (category == "All" or child:GetAttribute("Category") == category) end
+        end
+    end
+
+    local tabLayout = Instance.new("UIListLayout")
+    tabLayout.Parent = TabContainer
+    tabLayout.Padding = UDim.new(0, 2)
+
+    for _, cat in ipairs({"All", "Combat", "Visuals", "Misc", "Protection"}) do
+        local btn = Instance.new("TextButton")
+        btn.Name = cat .. "Tab"
+        btn.Parent = TabContainer
+        btn.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+        btn.Size = UDim2.new(1, 0, 0, 30)
+        btn.Font = Enum.Font.Gotham
+        btn.Text = cat
+        btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+        btn.TextSize = 12
+        btn.BorderSizePixel = 0
+        
+        btn.MouseButton1Click:Connect(function()
+            RefreshFeatures(cat)
+        end)
+    end
+
+    -- 新增功能按鈕的函數
+    Core.UI = {}
+    function Core.UI.AddFeature(id, info)
+        local frame = Instance.new("Frame")
+        local label = Instance.new("TextLabel")
+        local toggle = Instance.new("TextButton")
+
+        frame.Name = id
+        frame.Parent = FeatureList
+        frame.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+        frame.Size = UDim2.new(1, -5, 0, 35)
+        frame.BorderSizePixel = 0
+        frame:SetAttribute("Category", info.Category)
+
+        label.Parent = frame
+        label.Size = UDim2.new(1, -60, 1, 0)
+        label.Position = UDim2.new(0, 10, 0, 0)
+        label.BackgroundTransparency = 1
+        label.Text = info.Name
+        label.TextColor3 = Color3.fromRGB(255, 255, 255)
+        label.TextSize = 12
+        label.Font = Enum.Font.Gotham
+        label.TextXAlignment = Enum.TextXAlignment.Left
+
+        toggle.Parent = frame
+        toggle.Size = UDim2.new(0, 50, 0, 25)
+        toggle.Position = UDim2.new(1, -55, 0, 5)
+        toggle.BackgroundColor3 = info.Enabled and Color3.fromRGB(0, 200, 100) or Color3.fromRGB(200, 50, 50)
+        toggle.Text = info.Enabled and "ON" or "OFF"
+        toggle.TextColor3 = Color3.new(1, 1, 1)
+        toggle.Font = Enum.Font.GothamBold
+        toggle.TextSize = 10
+
+        toggle.MouseButton1Click:Connect(function()
+            local newState = Core.ToggleFeature(id)
+            toggle.BackgroundColor3 = newState and Color3.fromRGB(0, 200, 100) or Color3.fromRGB(200, 50, 50)
+            toggle.Text = newState and "ON" or "OFF"
+        end)
+
+        FeatureList.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y)
+    end
+
+    -- 初始化現有功能
+    for id, info in pairs(Core.Features) do
+        Core.UI.AddFeature(id, info)
+    end
+
+    Core.MainGui = ScreenGui
+    print("[Halol] GUI 已創建")
 end
 
 return Core

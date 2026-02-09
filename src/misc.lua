@@ -16,6 +16,23 @@ function Misc.Init(Core)
     env_global.InfJumpEnabled = env_global.InfJumpEnabled or false
     env_global.NoClipEnabled = env_global.NoClipEnabled or false
 
+    -- [[ 註冊功能 ]]
+    Core.RegisterFeature("InfJump", {
+        Name = "無限跳躍 (Infinite Jump)",
+        Category = "Misc",
+        Callback = function(state)
+            env_global.InfJumpEnabled = state
+        end
+    })
+
+    Core.RegisterFeature("NoClip", {
+        Name = "穿牆 (NoClip)",
+        Category = "Misc",
+        Callback = function(state)
+            env_global.NoClipEnabled = state
+        end
+    })
+
     -- [[ 移動功能優化 ]]
     local charParts = {}
     local function UpdateCharParts(char)

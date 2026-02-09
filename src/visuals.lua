@@ -20,6 +20,39 @@ function Visuals.Init(Core)
     env_global.AimbotFOV = env_global.AimbotFOV or 150
     env_global.ESPColor = env_global.ESPColor or Color3.fromRGB(255, 255, 255)
 
+    -- [[ 註冊功能 ]]
+    Core.RegisterFeature("ESPMain", {
+        Name = "玩家透視 (ESP)",
+        Category = "Visuals",
+        Callback = function(state)
+            env_global.ESPEnabled = state
+        end
+    })
+
+    Core.RegisterFeature("ESPBoxes", {
+        Name = "顯示方框 (Boxes)",
+        Category = "Visuals",
+        Callback = function(state)
+            env_global.ESPBoxes = state
+        end
+    })
+
+    Core.RegisterFeature("ESPNames", {
+        Name = "顯示名稱 (Names)",
+        Category = "Visuals",
+        Callback = function(state)
+            env_global.ESPNames = state
+        end
+    })
+
+    Core.RegisterFeature("ShowFOV", {
+        Name = "顯示範圍 (Show FOV)",
+        Category = "Visuals",
+        Callback = function(state)
+            env_global.ShowFOV = state
+        end
+    })
+
     -- [[ FOV Circle ]]
     local FOVCircle = Drawing.new("Circle")
     FOVCircle.Thickness = 1

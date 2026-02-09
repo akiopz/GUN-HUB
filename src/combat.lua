@@ -26,6 +26,23 @@ function Combat.Init(Core)
     env_global.SilentAimFOV = env_global.SilentAimFOV or 200
     env_global.SilentAimHitChance = env_global.SilentAimHitChance or 100
 
+    -- [[ 註冊功能 ]]
+    Core.RegisterFeature("Aimbot", {
+        Name = "自動瞄準 (Aimbot)",
+        Category = "Combat",
+        Callback = function(state)
+            env_global.AimbotEnabled = state
+        end
+    })
+
+    Core.RegisterFeature("SilentAim", {
+        Name = "靜默瞄準 (Silent Aim)",
+        Category = "Combat",
+        Callback = function(state)
+            env_global.SilentAimEnabled = state
+        end
+    })
+
     -- [[ 優化物件快取 ]]
     local raycastParams = RaycastParams.new()
     raycastParams.FilterType = Enum.RaycastFilterType.Exclude
