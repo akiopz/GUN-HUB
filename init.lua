@@ -167,6 +167,8 @@ local function Main()
         return 
     end
     
+    -- 優先初始化 GUI
+    Core.CreateGUI()
     Core.Notify("Halol", "核心加載成功，正在啟動功能...", 2)
     
     local modules = {
@@ -187,12 +189,6 @@ local function Main()
             end
         end)
     end
-    
-    -- 等待模組加載完成後創建 GUI
-    task.delay(1, function()
-        Core.CreateGUI()
-        Core.Notify("Halol", "所有功能已就緒，GUI 已啟動！", 3)
-    end)
 
     print("[Halol] 所有模組已發送加載請求。")
     print("========================================")

@@ -16,7 +16,13 @@ Core.checkcaller = env_global.checkcaller or (getgenv and getgenv().checkcaller)
 Core.getnamecallmethod = env_global.getnamecallmethod or (getgenv and getgenv().getnamecallmethod)
 Core.hookfunction = env_global.hookfunction or (getgenv and getgenv().hookfunction)
 Core.Drawing = env_global.Drawing or (getgenv and getgenv().Drawing)
-Core.gethui = env_global.gethui or (getgenv and getgenv().gethui) or function() return game:GetService("CoreGui") end
+Core.gethui = function()
+    local success, res = pcall(function() return env_global.gethui and env_global.gethui() end)
+    if success and res then return res end
+    success, res = pcall(function() return game:GetService("CoreGui") end)
+    if success and res then return res end
+    return Core.LocalPlayer:WaitForChild("PlayerGui")
+end
 Core.identifyexecutor = env_global.identifyexecutor or env_global.getexecutorname or function() return "Unknown" end
 Core.read_file = env_global.readfile or function(...) return nil end
 Core.write_file = env_global.writefile or function(...) return false end
@@ -171,6 +177,9 @@ function Core.CreateGUI()
     ScreenGui.Name = "HalolMainGui"
     ScreenGui.Parent = Core.gethui()
     ScreenGui.ResetOnSpawn = false
+    ScreenGui.DisplayOrder = 999
+    ScreenGui.IgnoreGuiInset = true
+    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
     MainFrame.Name = "MainFrame"
     MainFrame.Parent = ScreenGui
@@ -284,8 +293,12 @@ function Core.CreateGUI()
         Core.UI.AddFeature(id, info)
     end
 
+    -- 自動開啟選單 (防止隱藏)
+    MainFrame.Visible = true
+    ScreenGui.Enabled = true
+
     Core.MainGui = ScreenGui
-    print("[Halol] GUI 已創建")
+    print("[Halol] GUI 已創建並強制顯示")
 end
 
 return Core
