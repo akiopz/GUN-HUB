@@ -235,6 +235,66 @@ function Combat.Init(Core)
         return nearest
     end
 
+    -- [[ 靜默自瞄核心 Hook ]]
+    local function SetupSilentAim()
+        local hookmetamethod = Core.hookmetamethod
+        local getnamecallmethod = Core.getnamecallmethod
+        local newcclosure = Core.newcclosure
+        local checkcaller = Core.checkcaller
+
+        if not hookmetamethod then return end
+
+        local oldNamecall
+        oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+            local method = getnamecallmethod()
+            local args = {...}
+
+            if not checkcaller() and env_global.SilentAimEnabled then
+                if method == "Raycast" then
+                    local target = Combat.GetNearestEnemy()
+                    if target and math.random(1, 100) <= env_global.SilentAimHitChance then
+                        args[2] = (target.Position - args[1]).Unit * 1000
+                        return oldNamecall(self, unpack(args))
+                    end
+                elseif method == "FindPartOnRay" or method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" then
+                    local target = Combat.GetNearestEnemy()
+                    if target and math.random(1, 100) <= env_global.SilentAimHitChance then
+                        local origin = args[1].Origin
+                        local direction = (target.Position - origin).Unit * 1000
+                        args[1] = Ray.new(origin, direction)
+                        return oldNamecall(self, unpack(args))
+                    end
+                end
+            end
+            return oldNamecall(self, ...)
+        end))
+
+        -- Mouse Hook (__index)
+        local oldIndex
+        oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
+            if not checkcaller() and env_global.SilentAimEnabled then
+                if self:IsA("Mouse") then
+                    if key == "Hit" or key == "Target" then
+                        local target = Combat.GetNearestEnemy()
+                        if target and math.random(1, 100) <= env_global.SilentAimHitChance then
+                            if key == "Hit" then
+                                return target.CFrame
+                            elseif key == "Target" then
+                                return target
+                            end
+                        end
+                    end
+                end
+            end
+            return oldIndex(self, key)
+        end))
+        
+        print("[Halol] 靜默自瞄 Hook 已啟動")
+    end
+
+    -- 啟動所有循環與 Hook
+    SetupSilentAim()
+    
     -- [[ Aimbot 循環 ]]
     local lastTarget = nil
     RunService.RenderStepped:Connect(function()
