@@ -66,9 +66,27 @@
             local oldTick = tick
             hookfunction(tick, newcclosure(function()
                 if not checkcaller() then
-                    return oldTick() -- 可以在此加入平滑邏輯
+                    return oldTick()
                 end
                 return oldTick()
+            end))
+
+            -- 5. 堆棧追蹤偽裝 (Stack Trace Spoofing)
+            local oldTraceback = debug.traceback
+            hookfunction(debug.traceback, newcclosure(function(...)
+                local trace = oldTraceback(...)
+                if not checkcaller() and type(trace) == "string" then
+                    -- 移除所有包含外掛關鍵字的堆棧行
+                    local lines = trace:split("\n")
+                    local newLines = {}
+                    for _, line in ipairs(lines) do
+                        if not (line:lower():find("halol") or line:lower():find("combat") or line:lower():find("visuals")) then
+                            table.insert(newLines, line)
+                        end
+                    end
+                    return table.concat(newLines, "\n")
+                end
+                return trace
             end))
         end
         

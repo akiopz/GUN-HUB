@@ -273,8 +273,25 @@ function Combat.Init(Core)
                 -- 無後座力 & 無擴散 (透過 Namecall 攔截常見屬性修改)
                 if method == "FireServer" and (env_global.NoRecoil or env_global.NoSpread) then
                     local remoteName = self.Name:lower()
-                    if remoteName:find("recoil") or remoteName:find("spread") or remoteName:find("kick") then
-                        return -- 攔截後座力遠端調用
+                    -- 更加精確的攔截邏輯，避免誤傷正常遊戲邏輯
+                    if remoteName:find("recoil") or remoteName:find("spread") or remoteName:find("kick") or remoteName:find("shake") then
+                        return
+                    end
+                    
+                    -- 檢查參數中是否包含敏感數值 (如後座力系數)
+                    for i, v in ipairs(args) do
+                        if type(v) == "number" and v > 0 and (remoteName:find("weapon") or remoteName:find("gun")) then
+                            -- 如果數值看起來像後座力參數，則將其修改為 0
+                            args[i] = 0
+                        end
+                    end
+                end
+                
+                -- 通用 Remote 繞過 (防止行為檢測)
+                if method == "FireServer" or method == "InvokeServer" then
+                    local remoteName = self.Name:lower()
+                    if remoteName:find("check") or remoteName:find("detect") or remoteName:find("verify") then
+                        return -- 吞掉所有疑似檢查的請求
                     end
                 end
             end

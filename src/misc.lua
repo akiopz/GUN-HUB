@@ -94,12 +94,16 @@ function Misc.Init(Core)
         
         if not (hum and hrp) then return end
 
-        -- 1. 速度強化 (屬性模式)
-        if env_global.WalkSpeedEnabled then
-            hum.WalkSpeed = env_global.WalkSpeed
+        -- 1. 速度強化 (繞過模式：CFrame + Velocity 混合)
+        if env_global.WalkSpeedEnabled and hum.MoveDirection.Magnitude > 0 then
+            -- 保持屬性值為正常 (16)，但實際移動加快
+            local extraSpeed = (env_global.WalkSpeed - 16)
+            if extraSpeed > 0 then
+                hrp.CFrame = hrp.CFrame + (hum.MoveDirection * (extraSpeed * dt))
+            end
         end
 
-        -- 2. CFrame 速度 (繞過模式)
+        -- 2. CFrame 速度 (極速繞過模式)
         if env_global.CFrameSpeedEnabled and hum.MoveDirection.Magnitude > 0 then
             hrp.CFrame = hrp.CFrame + (hum.MoveDirection * env_global.CFrameSpeed * dt * 10)
         end
