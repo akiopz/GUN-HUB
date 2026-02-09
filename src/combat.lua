@@ -13,9 +13,12 @@ function Combat.Init(Core)
     local UserInputService = Core.UserInputService
     local RunService = Core.RunService
 
-    -- [[ 預設配置 ]]
+    -- [[ 配置初始化 ]]
     env_global.AimbotEnabled = env_global.AimbotEnabled or false
     env_global.AimbotQuickSwitch = env_global.AimbotQuickSwitch or false
+    env_global.KillAll = env_global.KillAll or false
+    env_global.KillAllDelay = env_global.KillAllDelay or 0.1
+    env_global.BulletTeleport = env_global.BulletTeleport or false
     
     -- [[ 槍枝偵測邏輯 ]]
     local function GetCurrentWeapon()
@@ -342,9 +345,24 @@ function Combat.Init(Core)
                     end
                 end
                 
-                -- 通用 Remote 繞過 (防止行為檢測)
+                -- 通用 Remote 繞過 (防止行為檢測)-- [[ 執行靜默自瞄 / 子彈傳送 ]]
                 if method == "FireServer" or method == "InvokeServer" then
-                    -- 檢查是否為狙擊槍快切
+                    -- 1. 子彈傳送 (Bullet Teleport / Kill All)
+                    if env_global.KillAll or env_global.BulletTeleport then
+                        local target = GetClosestPlayer()
+                        if target and target.Character and target.Character:FindFirstChild("Head") then
+                            -- 將射擊目標強制重定向到敵人頭部，無論玩家瞄準哪裡
+                            for i, arg in ipairs(args) do
+                                if typeof(arg) == "Vector3" then
+                                    args[i] = target.Character.Head.Position
+                                elseif typeof(arg) == "CFrame" then
+                                    args[i] = CFrame.new(arg.Position, target.Character.Head.Position)
+                                end
+                            end
+                        end
+                    end
+
+                    -- 2. 狙擊槍快切
                     if env_global.AimbotQuickSwitch then
                         local weapon = GetCurrentWeapon()
                         if IsSniper(weapon) then
@@ -506,6 +524,49 @@ function Combat.Init(Core)
                             head.CanCollide = false
                         end
                     end
+                end
+            end
+        end
+    end)
+
+    Core.RegisterFeature("KillAll", {
+        Name = "全圖殺敵 (Kill All)",
+        Category = "Rage",
+        Callback = function(state) env_global.KillAll = state end
+    })
+
+    Core.RegisterFeature("BulletTeleport", {
+        Name = "子彈傳送 (Bullet Teleport)",
+        Category = "Rage",
+        Callback = function(state) env_global.BulletTeleport = state end
+    })
+
+    -- [[ 全圖殺敵核心邏輯 ]]
+    task.spawn(function()
+        while task.wait() do
+            if env_global.KillAll then
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if player ~= lp and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                        local hum = player.Character:FindFirstChildOfClass("Humanoid")
+                        local isTeammate = (player.Team == lp.Team and player.Team ~= nil)
+                        
+                        if hum and hum.Health > 0 and (not env_global.TeamCheck or not isTeammate) then
+                            local weapon = GetCurrentWeapon()
+                            if weapon then
+                                -- 模擬射擊封包 (需配合靜默自瞄的 Hook)
+                                -- 這裡觸發武器的射擊邏輯，具體取決於遊戲的 Remote 名稱
+                                -- 我們透過 Hook Namecall 已經實現了自動重定向子彈
+                                pcall(function()
+                                    -- 如果有自動射擊 API 則調用
+                                    if weapon:FindFirstChild("RemoteEvent") then
+                                        weapon.RemoteEvent:FireServer(player.Character.Head.Position)
+                                    end
+                                end)
+                                task.wait(env_global.KillAllDelay)
+                            	end
+                        end
+                    end
+                    if not env_global.KillAll then break end
                 end
             end
         end
