@@ -21,8 +21,26 @@ function Visuals.Init(Core)
     env_global.ESPColor = env_global.ESPColor or Color3.fromRGB(255, 255, 255)
     env_global.ESPHealthBar = env_global.ESPHealthBar or false
     env_global.ESPChams = env_global.ESPChams or false
+    env_global.ESPTeamCheck = env_global.ESPTeamCheck or true
+    env_global.ESPShowTeammates = env_global.ESPShowTeammates or false
+    env_global.ESPDistance = env_global.ESPDistance or false
 
     -- [[ 註冊功能 ]]
+    Core.RegisterFeature("ESPTeamCheck", {
+        Name = "隊伍檢查 (Team Check)",
+        Category = "Visuals",
+        Callback = function(state)
+            env_global.ESPTeamCheck = state
+        end
+    })
+
+    Core.RegisterFeature("ESPShowTeammates", {
+        Name = "顯示隊友 (Show Team)",
+        Category = "Visuals",
+        Callback = function(state)
+            env_global.ESPShowTeammates = state
+        end
+    })
     Core.RegisterFeature("ESPMain", {
         Name = "玩家透視 (ESP)",
         Category = "Visuals",
@@ -60,6 +78,14 @@ function Visuals.Init(Core)
         Category = "Visuals",
         Callback = function(state)
             env_global.ESPChams = state
+        end
+    })
+
+    Core.RegisterFeature("ESPDistance", {
+        Name = "顯示距離 (Distance)",
+        Category = "Visuals",
+        Callback = function(state)
+            env_global.ESPDistance = state
         end
     })
 
@@ -149,10 +175,18 @@ function Visuals.Init(Core)
     local function UpdateESP()
         for player, objects in pairs(ESP_Objects) do
             local char = player.Character
-            local isTeam = (player.Team == lp.Team and player.Team ~= nil)
+            local isTeammate = (player.Team == lp.Team and player.Team ~= nil)
             local visible = false
             
-            if env_global.ESPEnabled and char and player ~= lp and not isTeam then
+            local shouldShow = false
+            if env_global.ESPEnabled and char and player ~= lp then
+                shouldShow = true
+                if env_global.ESPTeamCheck and isTeammate and not env_global.ESPShowTeammates then
+                    shouldShow = false
+                end
+            end
+
+            if shouldShow then
                 local hrp = char:FindFirstChild("HumanoidRootPart")
                 local hum = char:FindFirstChild("Humanoid")
                 
@@ -162,17 +196,24 @@ function Visuals.Init(Core)
                     if onScreen then
                         -- 計算 Box 大小
                         local head = char:FindFirstChild("Head")
-                        local headPos = head and Camera:WorldToViewportPoint(head.Position) or {Y = pos.Y - 2}
-                        local sizeY = math.abs(pos.Y - headPos.Y) * 3
+                        local headPos = head and Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0)) or {Y = pos.Y - 2}
+                        local legPos = Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3, 0))
+                        local sizeY = math.abs(headPos.Y - legPos.Y)
                         local sizeX = sizeY * 0.6
                         
                         -- 更新 Box
                         objects.Box.Size = Vector2.new(sizeX, sizeY)
                         objects.Box.Position = Vector2.new(pos.X - sizeX/2, pos.Y - sizeY/2)
+                        objects.Box.Color = isTeammate and Color3.new(0, 1, 0) or env_global.ESPColor
                         objects.Box.Visible = env_global.ESPBoxes
                         
-                        -- 更新 Name
-                        objects.Name.Text = player.Name
+                        -- 更新 Name & Distance
+                        local nameText = player.Name
+                        if env_global.ESPDistance then
+                            local dist = math.floor((hrp.Position - Camera.CFrame.Position).Magnitude)
+                            nameText = nameText .. " [" .. dist .. "m]"
+                        end
+                        objects.Name.Text = nameText
                         objects.Name.Position = Vector2.new(pos.X, pos.Y - sizeY/2 - 15)
                         objects.Name.Visible = env_global.ESPNames
                         
