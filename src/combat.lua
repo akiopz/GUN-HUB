@@ -241,6 +241,7 @@ function Combat.Init(Core)
         local getnamecallmethod = Core.getnamecallmethod
         local newcclosure = Core.newcclosure
         local checkcaller = Core.checkcaller
+        local setconstant = debug.setconstant or (syn and syn.set_constant)
 
         if not hookmetamethod then return end
 
@@ -249,47 +250,77 @@ function Combat.Init(Core)
             local method = getnamecallmethod()
             local args = {...}
 
-            if not checkcaller() and env_global.SilentAimEnabled then
-                if method == "Raycast" then
-                    local target = Combat.GetNearestEnemy()
-                    if target and math.random(1, 100) <= env_global.SilentAimHitChance then
-                        args[2] = (target.Position - args[1]).Unit * 1000
-                        return oldNamecall(self, unpack(args))
+            if not checkcaller() then
+                -- 靜默自瞄
+                if env_global.SilentAimEnabled then
+                    if method == "Raycast" then
+                        local target = Combat.GetNearestEnemy()
+                        if target and math.random(1, 100) <= env_global.SilentAimHitChance then
+                            args[2] = (target.Position - args[1]).Unit * 1000
+                            return oldNamecall(self, unpack(args))
+                        end
+                    elseif method == "FindPartOnRay" or method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" then
+                        local target = Combat.GetNearestEnemy()
+                        if target and math.random(1, 100) <= env_global.SilentAimHitChance then
+                            local origin = args[1].Origin
+                            local direction = (target.Position - origin).Unit * 1000
+                            args[1] = Ray.new(origin, direction)
+                            return oldNamecall(self, unpack(args))
+                        end
                     end
-                elseif method == "FindPartOnRay" or method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" then
-                    local target = Combat.GetNearestEnemy()
-                    if target and math.random(1, 100) <= env_global.SilentAimHitChance then
-                        local origin = args[1].Origin
-                        local direction = (target.Position - origin).Unit * 1000
-                        args[1] = Ray.new(origin, direction)
-                        return oldNamecall(self, unpack(args))
+                end
+
+                -- 無後座力 & 無擴散 (透過 Namecall 攔截常見屬性修改)
+                if method == "FireServer" and (env_global.NoRecoil or env_global.NoSpread) then
+                    local remoteName = self.Name:lower()
+                    if remoteName:find("recoil") or remoteName:find("spread") or remoteName:find("kick") then
+                        return -- 攔截後座力遠端調用
                     end
                 end
             end
             return oldNamecall(self, ...)
         end))
 
-        -- Mouse Hook (__index)
+        -- 屬性 Hook (__index / __newindex)
         local oldIndex
         oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
-            if not checkcaller() and env_global.SilentAimEnabled then
-                if self:IsA("Mouse") then
+            if not checkcaller() then
+                -- 鼠標 Hook
+                if env_global.SilentAimEnabled and self:IsA("Mouse") then
                     if key == "Hit" or key == "Target" then
                         local target = Combat.GetNearestEnemy()
                         if target and math.random(1, 100) <= env_global.SilentAimHitChance then
-                            if key == "Hit" then
-                                return target.CFrame
-                            elseif key == "Target" then
-                                return target
-                            end
+                            if key == "Hit" then return target.CFrame
+                            elseif key == "Target" then return target end
                         end
                     end
+                end
+                
+                -- 無後座力 / 無擴散 屬性偽造
+                if env_global.NoRecoil and (key == "Recoil" or key == "RecoilControl" or key == "VisualRecoil") then
+                    return 0
+                end
+                if env_global.NoSpread and (key == "Spread" or key == "Accuracy" or key == "Inaccuracy") then
+                    return 0
                 end
             end
             return oldIndex(self, key)
         end))
         
-        print("[Halol] 靜默自瞄 Hook 已啟動")
+        local oldNewIndex
+        oldNewIndex = hookmetamethod(game, "__newindex", newcclosure(function(self, key, value)
+            if not checkcaller() then
+                if env_global.NoRecoil and (key == "Recoil" or key == "RecoilControl" or key == "VisualRecoil") then
+                    return oldNewIndex(self, key, 0)
+                end
+                if env_global.NoSpread and (key == "Spread" or key == "Accuracy" or key == "Inaccuracy") then
+                    return oldNewIndex(self, key, 0)
+                end
+            end
+            return oldNewIndex(self, key, value)
+        end))
+        
+        print("[Halol] 強化 Combat Hooks 已啟動")
     end
 
     -- 啟動所有循環與 Hook

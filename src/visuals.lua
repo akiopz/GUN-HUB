@@ -15,6 +15,8 @@ function Visuals.Init(Core)
     -- [[ ESP 配置 ]]
     env_global.ESPEnabled = env_global.ESPEnabled or false
     env_global.ESPBoxes = env_global.ESPBoxes or false
+    env_global.ESP3DBoxes = env_global.ESP3DBoxes or false
+    env_global.ESPSkeleton = env_global.ESPSkeleton or false
     env_global.ESPNames = env_global.ESPNames or false
     env_global.ShowFOV = env_global.ShowFOV or false
     env_global.AimbotFOV = env_global.AimbotFOV or 150
@@ -50,10 +52,26 @@ function Visuals.Init(Core)
     })
 
     Core.RegisterFeature("ESPBoxes", {
-        Name = "顯示方框 (Boxes)",
+        Name = "2D 框 (2D Box)",
         Category = "Visuals",
         Callback = function(state)
             env_global.ESPBoxes = state
+        end
+    })
+
+    Core.RegisterFeature("ESP3DBoxes", {
+        Name = "3D 框 (3D Box)",
+        Category = "Visuals",
+        Callback = function(state)
+            env_global.ESP3DBoxes = state
+        end
+    })
+
+    Core.RegisterFeature("ESPSkeleton", {
+        Name = "骨骼透視 (Skeleton)",
+        Category = "Visuals",
+        Callback = function(state)
+            env_global.ESPSkeleton = state
         end
     })
 
@@ -131,8 +149,35 @@ function Visuals.Init(Core)
             Tracer = Drawing.new("Line"),
             HealthBar = Drawing.new("Line"),
             HealthBarBG = Drawing.new("Line"),
-            Chams = Instance.new("Highlight")
+            Chams = Instance.new("Highlight"),
+            Skeleton = {},
+            Box3D = {}
         }
+
+        -- 初始化 3D Box (12 條線)
+        for i = 1, 12 do
+            local line = Drawing.new("Line")
+            line.Thickness = 1
+            line.Transparency = 1
+            line.Visible = false
+            table.insert(objects.Box3D, line)
+        end
+
+        -- 初始化 Skeleton (常用骨骼連接)
+        local connections = {
+            {"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"},
+            {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"}, {"LeftLowerArm", "LeftHand"},
+            {"UpperTorso", "RightUpperArm"}, {"RightUpperArm", "RightLowerArm"}, {"RightLowerArm", "RightHand"},
+            {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"}, {"LeftLowerLeg", "LeftFoot"},
+            {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}, {"RightLowerLeg", "RightFoot"}
+        }
+        for _, _ in ipairs(connections) do
+            local line = Drawing.new("Line")
+            line.Thickness = 1
+            line.Transparency = 1
+            line.Visible = false
+            table.insert(objects.Skeleton, line)
+        end
         
         objects.Box.Thickness = 1
         objects.Box.Filled = false
@@ -214,8 +259,82 @@ function Visuals.Init(Core)
                             nameText = nameText .. " [" .. dist .. "m]"
                         end
                         objects.Name.Text = nameText
-                        objects.Name.Position = Vector2.new(pos.X, pos.Y - sizeY/2 - 15)
-                        objects.Name.Visible = env_global.ESPNames
+                         objects.Name.Position = Vector2.new(pos.X, pos.Y - sizeY/2 - 15)
+                         objects.Name.Visible = env_global.ESPNames
+
+                         -- 更新 3D Box
+                         if env_global.ESP3DBoxes then
+                             local cf = char:GetPivot()
+                             local size = Vector3.new(4, 6, 4) -- 角色大致大小
+                             local points = {
+                                 cf * CFrame.new(-size.X/2, size.Y/2, -size.Z/2),
+                                 cf * CFrame.new(size.X/2, size.Y/2, -size.Z/2),
+                                 cf * CFrame.new(size.X/2, size.Y/2, size.Z/2),
+                                 cf * CFrame.new(-size.X/2, size.Y/2, size.Z/2),
+                                 cf * CFrame.new(-size.X/2, -size.Y/2, -size.Z/2),
+                                 cf * CFrame.new(size.X/2, -size.Y/2, -size.Z/2),
+                                 cf * CFrame.new(size.X/2, -size.Y/2, size.Z/2),
+                                 cf * CFrame.new(-size.X/2, -size.Y/2, size.Z/2)
+                             }
+                             local screenPoints = {}
+                             for i, p in ipairs(points) do
+                                 local v, on = Camera:WorldToViewportPoint(p.Position)
+                                 screenPoints[i] = {v, on}
+                             end
+                             
+                             local lines = {
+                                 {1,2}, {2,3}, {3,4}, {4,1}, -- Top
+                                 {5,6}, {6,7}, {7,8}, {8,5}, -- Bottom
+                                 {1,5}, {2,6}, {3,7}, {4,8}  -- Vertical
+                             }
+                             for i, connection in ipairs(lines) do
+                                 local p1 = screenPoints[connection[1]]
+                                 local p2 = screenPoints[connection[2]]
+                                 local line = objects.Box3D[i]
+                                 if p1[2] and p2[2] then
+                                     line.From = Vector2.new(p1[1].X, p1[1].Y)
+                                     line.To = Vector2.new(p2[1].X, p2[1].Y)
+                                     line.Color = isTeammate and Color3.new(0, 1, 0) or env_global.ESPColor
+                                     line.Visible = true
+                                 else
+                                     line.Visible = false
+                                 end
+                             end
+                         else
+                             for _, line in ipairs(objects.Box3D) do line.Visible = false end
+                         end
+
+                         -- 更新 Skeleton
+                         if env_global.ESPSkeleton then
+                             local connections = {
+                                 {"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"},
+                                 {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"}, {"LeftLowerArm", "LeftHand"},
+                                 {"UpperTorso", "RightUpperArm"}, {"RightUpperArm", "RightLowerArm"}, {"RightLowerArm", "RightHand"},
+                                 {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"}, {"LeftLowerLeg", "LeftFoot"},
+                                 {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}, {"RightLowerLeg", "RightFoot"}
+                             }
+                             for i, pair in ipairs(connections) do
+                                 local p1 = char:FindFirstChild(pair[1])
+                                 local p2 = char:FindFirstChild(pair[2])
+                                 local line = objects.Skeleton[i]
+                                 if p1 and p2 then
+                                     local v1, on1 = Camera:WorldToViewportPoint(p1.Position)
+                                     local v2, on2 = Camera:WorldToViewportPoint(p2.Position)
+                                     if on1 and on2 then
+                                         line.From = Vector2.new(v1.X, v1.Y)
+                                         line.To = Vector2.new(v2.X, v2.Y)
+                                         line.Color = isTeammate and Color3.new(0, 1, 0) or env_global.ESPColor
+                                         line.Visible = true
+                                     else
+                                         line.Visible = false
+                                     end
+                                 else
+                                     line.Visible = false
+                                 end
+                             end
+                         else
+                             for _, line in ipairs(objects.Skeleton) do line.Visible = false end
+                         end
                         
                         -- 更新 Health Bar
                         if env_global.ESPHealthBar then
