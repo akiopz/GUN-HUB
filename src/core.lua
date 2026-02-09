@@ -190,7 +190,17 @@ end
 
 -- [[ 功能註冊系統 (為 UI 做準備) ]]
 Core.Features = {}
-Core.Categories = {"Rage", "Combat", "Visuals", "World", "Misc", "Protection"}
+Core.Categories = {"All", "Favorites", "Rage", "Combat", "Visuals", "World", "Misc", "Protection"}
+Core.CategoryIcons = {
+    All = "🏠",
+    Favorites = "⭐",
+    Rage = "🔥",
+    Combat = "🎯",
+    Visuals = "👁️",
+    World = "🌍",
+    Misc = "⚙️",
+    Protection = "🛡️"
+}
 
 function Core.RegisterFeature(id, info)
     Core.Features[id] = {
@@ -198,9 +208,10 @@ function Core.RegisterFeature(id, info)
         Description = info.Description or "",
         Category = info.Category or "Misc",
         Callback = info.Callback,
-        Enabled = false
+        Enabled = false,
+        Favorite = false
     }
-    -- 如果 GUI 已經存在，則更新 GUI (這部分待會實現)
+    -- 如果 GUI 已經存在，則更新 GUI
     if Core.UI and Core.UI.AddFeature then
         Core.UI.AddFeature(id, Core.Features[id])
     end
@@ -229,12 +240,15 @@ function Core.CreateGUI()
         return
     end
 
+    local TweenService = game:GetService("TweenService")
     local ScreenGui = Instance.new("ScreenGui")
     local MainFrame = Instance.new("Frame")
     local Title = Instance.new("TextLabel")
     local TabContainer = Instance.new("Frame")
     local FeatureList = Instance.new("ScrollingFrame")
     local UIListLayout = Instance.new("UIListLayout")
+    local SearchBar = Instance.new("Frame")
+    local SearchInput = Instance.new("TextBox")
 
     ScreenGui.Name = "HalolMainGui"
     ScreenGui.Parent = targetParent
@@ -248,16 +262,16 @@ function Core.CreateGUI()
     MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
     MainFrame.BorderSizePixel = 0
     MainFrame.Position = UDim2.new(0.5, -200, 0.5, -150)
-    MainFrame.Size = UDim2.new(0, 400, 0, 300)
+    MainFrame.Size = UDim2.new(0, 420, 0, 320)
     MainFrame.Active = true
     MainFrame.Draggable = true
 
     Title.Name = "Title"
     Title.Parent = MainFrame
     Title.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
-    Title.Size = UDim2.new(1, 0, 0, 30)
+    Title.Size = UDim2.new(1, 0, 0, 35)
     Title.Font = Enum.Font.GothamBold
-    Title.Text = "  Halol GUN-HUB v1.0.3"
+    Title.Text = "  Halol GUN-HUB v1.0.6"
     Title.TextColor3 = Color3.fromRGB(255, 255, 255)
     Title.TextSize = 14
     Title.TextXAlignment = Enum.TextXAlignment.Left
@@ -265,51 +279,113 @@ function Core.CreateGUI()
     TabContainer.Name = "TabContainer"
     TabContainer.Parent = MainFrame
     TabContainer.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
-    TabContainer.Position = UDim2.new(0, 0, 0, 30)
-    TabContainer.Size = UDim2.new(0, 100, 1, -30)
+    TabContainer.Position = UDim2.new(0, 0, 0, 35)
+    TabContainer.Size = UDim2.new(0, 110, 1, -35)
+
+    SearchBar.Name = "SearchBar"
+    SearchBar.Parent = MainFrame
+    SearchBar.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+    SearchBar.Position = UDim2.new(0, 115, 0, 40)
+    SearchBar.Size = UDim2.new(1, -125, 0, 30)
+    SearchBar.BorderSizePixel = 0
+
+    SearchInput.Name = "SearchInput"
+    SearchInput.Parent = SearchBar
+    SearchInput.BackgroundTransparency = 1
+    SearchInput.Size = UDim2.new(1, -20, 1, 0)
+    SearchInput.Position = UDim2.new(0, 10, 0, 0)
+    SearchInput.Font = Enum.Font.Gotham
+    SearchInput.PlaceholderText = "搜尋功能... (Search)"
+    SearchInput.Text = ""
+    SearchInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+    SearchInput.TextSize = 12
+    SearchInput.TextXAlignment = Enum.TextXAlignment.Left
 
     FeatureList.Name = "FeatureList"
     FeatureList.Parent = MainFrame
     FeatureList.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-    FeatureList.Position = UDim2.new(0, 105, 0, 35)
-    FeatureList.Size = UDim2.new(1, -110, 1, -40)
+    FeatureList.Position = UDim2.new(0, 115, 0, 75)
+    FeatureList.Size = UDim2.new(1, -125, 1, -85)
     FeatureList.ScrollBarThickness = 2
     FeatureList.CanvasSize = UDim2.new(0, 0, 0, 0)
+    FeatureList.BorderSizePixel = 0
 
     UIListLayout.Parent = FeatureList
     UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
     UIListLayout.Padding = UDim.new(0, 5)
 
+    local currentCategory = "All"
+    local searchText = ""
+
     -- 分類按鈕與過濾邏輯
-    local function RefreshFeatures(category)
+    local function RefreshFeatures()
         if not FeatureList then return end
         for _, child in ipairs(FeatureList:GetChildren()) do
             if child:IsA("Frame") then 
                 local featCat = child:GetAttribute("Category")
-                child.Visible = (category == "All" or featCat == category) 
+                local featName = child:GetAttribute("DisplayName") or child.Name
+                local isFavorite = child:GetAttribute("IsFavorite") or false
+                
+                local matchCat = (currentCategory == "All" or featCat == currentCategory or (currentCategory == "Favorites" and isFavorite))
+                local matchSearch = (searchText == "" or string.find(string.lower(featName), string.lower(searchText)) or string.find(string.lower(child.Name), string.lower(searchText)))
+                
+                child.Visible = matchCat and matchSearch
             end
         end
     end
+
+    SearchInput:GetPropertyChangedSignal("Text"):Connect(function()
+        searchText = SearchInput.Text
+        RefreshFeatures()
+    end)
 
     local tabLayout = Instance.new("UIListLayout")
     tabLayout.Parent = TabContainer
     tabLayout.Padding = UDim.new(0, 2)
 
-    for _, cat in ipairs({"All", "Rage", "Combat", "Visuals", "Misc", "Protection"}) do
+    for _, cat in ipairs(Core.Categories) do
         local btn = Instance.new("TextButton")
+        local icon = Core.CategoryIcons[cat] or ""
+        
         btn.Name = cat .. "Tab"
         btn.Parent = TabContainer
         btn.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
-        btn.Size = UDim2.new(1, 0, 0, 30)
+        btn.Size = UDim2.new(1, 0, 0, 35)
         btn.Font = Enum.Font.Gotham
-        btn.Text = cat
+        btn.Text = " " .. icon .. " " .. cat
         btn.TextColor3 = Color3.fromRGB(200, 200, 200)
         btn.TextSize = 12
         btn.BorderSizePixel = 0
+        btn.TextXAlignment = Enum.TextXAlignment.Left
         
-        btn.MouseButton1Click:Connect(function()
-            RefreshFeatures(cat)
+        btn.MouseEnter:Connect(function()
+            TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(60, 60, 65)}):Play()
         end)
+        
+        btn.MouseLeave:Connect(function()
+            if currentCategory ~= cat then
+                TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(45, 45, 50)}):Play()
+            end
+        end)
+
+        btn.MouseButton1Click:Connect(function()
+            currentCategory = cat
+            for _, otherBtn in ipairs(TabContainer:GetChildren()) do
+                if otherBtn:IsA("TextButton") then
+                    otherBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+                    otherBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+                end
+            end
+            btn.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            RefreshFeatures()
+        end)
+        
+        -- 預設選中 All
+        if cat == "All" then
+            btn.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        end
     end
 
     -- 自動更新 CanvasSize
@@ -324,6 +400,7 @@ function Core.CreateGUI()
         local frame = Instance.new("Frame")
         local label = Instance.new("TextLabel")
         local toggle = Instance.new("TextButton")
+        local favorite = Instance.new("TextButton")
 
         frame.Name = id
         frame.Parent = FeatureList
@@ -331,10 +408,22 @@ function Core.CreateGUI()
         frame.Size = UDim2.new(1, -5, 0, 35)
         frame.BorderSizePixel = 0
         frame:SetAttribute("Category", info.Category)
+        frame:SetAttribute("DisplayName", info.Name)
+        frame:SetAttribute("IsFavorite", info.Favorite)
+
+        favorite.Name = "Favorite"
+        favorite.Parent = frame
+        favorite.Size = UDim2.new(0, 25, 0, 25)
+        favorite.Position = UDim2.new(0, 5, 0, 5)
+        favorite.BackgroundTransparency = 1
+        favorite.Text = info.Favorite and "⭐" or "☆"
+        favorite.TextColor3 = info.Favorite and Color3.fromRGB(255, 200, 0) or Color3.fromRGB(150, 150, 150)
+        favorite.TextSize = 14
+        favorite.Font = Enum.Font.GothamBold
 
         label.Parent = frame
-        label.Size = UDim2.new(1, -60, 1, 0)
-        label.Position = UDim2.new(0, 10, 0, 0)
+        label.Size = UDim2.new(1, -90, 1, 0)
+        label.Position = UDim2.new(0, 35, 0, 0)
         label.BackgroundTransparency = 1
         label.Text = info.Name
         label.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -350,6 +439,16 @@ function Core.CreateGUI()
         toggle.TextColor3 = Color3.new(1, 1, 1)
         toggle.Font = Enum.Font.GothamBold
         toggle.TextSize = 10
+
+        favorite.MouseButton1Click:Connect(function()
+            info.Favorite = not info.Favorite
+            frame:SetAttribute("IsFavorite", info.Favorite)
+            favorite.Text = info.Favorite and "⭐" or "☆"
+            favorite.TextColor3 = info.Favorite and Color3.fromRGB(255, 200, 0) or Color3.fromRGB(150, 150, 150)
+            if currentCategory == "Favorites" and not info.Favorite then
+                frame.Visible = false
+            end
+        end)
 
         toggle.MouseButton1Click:Connect(function()
             local success, newState = pcall(function() return Core.ToggleFeature(id) end)
@@ -375,13 +474,14 @@ function Core.CreateGUI()
         local current = info.Default or options[1]
         local isOpen = false
 
-        frame.Name = id .. "Dropdown"
+        frame.Name = id
         frame.Parent = FeatureList
         frame.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
         frame.Size = UDim2.new(1, -5, 0, 40)
         frame.BorderSizePixel = 0
         frame.ZIndex = 2
         frame:SetAttribute("Category", info.Category)
+        frame:SetAttribute("DisplayName", info.Name)
 
         label.Parent = frame
         label.Size = UDim2.new(0.5, -10, 1, 0)
@@ -461,12 +561,13 @@ function Core.CreateGUI()
         local default = info.Default or min
         local current = default
 
-        frame.Name = id .. "Slider"
+        frame.Name = id
         frame.Parent = FeatureList
         frame.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
         frame.Size = UDim2.new(1, -5, 0, 45)
         frame.BorderSizePixel = 0
         frame:SetAttribute("Category", info.Category)
+        frame:SetAttribute("DisplayName", info.Name)
 
         label.Parent = frame
         label.Size = UDim2.new(1, -10, 0, 20)
@@ -534,12 +635,13 @@ function Core.CreateGUI()
         local label = Instance.new("TextLabel")
         local bindBtn = Instance.new("TextButton")
 
-        frame.Name = id .. "Bind"
+        frame.Name = id
         frame.Parent = FeatureList
         frame.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
         frame.Size = UDim2.new(1, -5, 0, 35)
         frame.BorderSizePixel = 0
         frame:SetAttribute("Category", info.Category)
+        frame:SetAttribute("DisplayName", info.Name)
 
         label.Parent = frame
         label.Size = UDim2.new(1, -80, 1, 0)
@@ -554,23 +656,29 @@ function Core.CreateGUI()
         bindBtn.Parent = frame
         bindBtn.Size = UDim2.new(0, 70, 0, 25)
         bindBtn.Position = UDim2.new(1, -75, 0, 5)
-        bindBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+        bindBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 65)
         bindBtn.Text = info.Default and info.Default.Name or "NONE"
-        bindBtn.TextColor3 = Color3.new(1, 1, 1)
+        bindBtn.TextColor3 = Color3.fromRGB(0, 150, 255)
         bindBtn.Font = Enum.Font.GothamBold
         bindBtn.TextSize = 10
 
-        local listening = false
+        local binding = false
         bindBtn.MouseButton1Click:Connect(function()
-            listening = true
+            binding = true
             bindBtn.Text = "..."
         end)
 
         Core.UserInputService.InputBegan:Connect(function(input)
-            if listening and input.UserInputType == Enum.UserInputType.Keyboard then
-                listening = false
-                bindBtn.Text = input.KeyCode.Name
-                if info.Callback then info.Callback(input.KeyCode) end
+            if binding then
+                if input.UserInputType == Enum.UserInputType.Keyboard then
+                    binding = false
+                    bindBtn.Text = input.KeyCode.Name
+                    if info.Callback then info.Callback(input.KeyCode) end
+                elseif input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.MouseButton2 then
+                    binding = false
+                    bindBtn.Text = input.UserInputType.Name
+                    if info.Callback then info.Callback(input.UserInputType) end
+                end
             end
         end)
 

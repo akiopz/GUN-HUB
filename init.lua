@@ -5,7 +5,7 @@
 -- [[ 啟動最前端：立即回饋 ]]
 print("========================================")
 print("[Halol] 偵測到執行指令，正在初始化...")
-local CURRENT_VERSION = "1.0.5"
+local CURRENT_VERSION = "1.0.6"
 
 pcall(function()
     game:GetService("StarterGui"):SetCore("SendNotification", {
