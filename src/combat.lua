@@ -22,6 +22,10 @@ function Combat.Init(Core)
     env_global.AimbotPriority = env_global.AimbotPriority or "Mouse" -- "Mouse", "Distance"
     env_global.AimbotPrediction = env_global.AimbotPrediction or false
     env_global.AimbotPredictionAmount = env_global.AimbotPredictionAmount or 0.165
+    env_global.AimbotBulletSpeed = env_global.AimbotBulletSpeed or 1000 -- 用於進階預測
+    env_global.AimbotGravity = env_global.AimbotGravity or 196.2 -- 用於重力補償
+    env_global.AimbotMultiBone = env_global.AimbotMultiBone or true -- 多骨骼掃描
+    env_global.AimbotSticky = env_global.AimbotSticky or false -- 黏性瞄準
     env_global.SilentAimEnabled = env_global.SilentAimEnabled or false
     env_global.SilentAimFOV = env_global.SilentAimFOV or 200
     env_global.SilentAimHitChance = env_global.SilentAimHitChance or 100
@@ -157,38 +161,67 @@ function Combat.Init(Core)
         local nearest = nil
         local maxDist = env_global.AimbotFOV
         local minDistanceToChar = math.huge
+        local minHealth = math.huge
         local mousePos = UserInputService:GetMouseLocation()
         local localChar = lp.Character
 
+        -- 黏性瞄準：如果已有目標且目標存活，優先保留
+        if env_global.AimbotSticky and lastTarget and lastTarget.Parent then
+            local hum = lastTarget.Parent:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(lastTarget.Position)
+                if onScreen then
+                    local mouseDistance = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+                    if mouseDistance < env_global.AimbotFOV * 1.5 then -- 擴大一點黏性範圍
+                        return lastTarget
+                    end
+                end
+            end
+        end
+
         for _, player in ipairs(Players:GetPlayers()) do
             if player ~= lp then
-                -- 團隊檢查優化
                 local isTeam = (player.Team == lp.Team and player.Team ~= nil)
                 if not isTeam then
                     local char = player.Character
                     if char then
                         local humanoid = char:FindFirstChildOfClass("Humanoid")
                         if humanoid and humanoid.Health > 0 then
-                            local targetPart = char:FindFirstChild(env_global.AimbotTargetPart) or char:FindFirstChild("HumanoidRootPart")
-                            if targetPart then
-                                local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+                            -- 多骨骼掃描邏輯
+                            local bones = {env_global.AimbotTargetPart, "UpperTorso", "HumanoidRootPart", "LowerTorso"}
+                            local bestBone = nil
+                            
+                            for _, boneName in ipairs(bones) do
+                                local bone = char:FindFirstChild(boneName)
+                                if bone then
+                                    if IsVisible(bone, localChar) then
+                                        bestBone = bone
+                                        break -- 找到第一個可見骨骼就停止
+                                    end
+                                    if not env_global.AimbotMultiBone then break end
+                                end
+                            end
+
+                            if bestBone then
+                                local screenPos, onScreen = Camera:WorldToViewportPoint(bestBone.Position)
                                 if onScreen then
                                     local mouseDistance = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
                                     if mouseDistance < maxDist then
                                         -- 優先度邏輯
                                         if env_global.AimbotPriority == "Mouse" then
-                                            if IsVisible(targetPart, localChar) then
-                                                maxDist = mouseDistance
-                                                nearest = targetPart
-                                            end
+                                            maxDist = mouseDistance
+                                            nearest = bestBone
                                         elseif env_global.AimbotPriority == "Distance" then
                                             local hrp = localChar and localChar:FindFirstChild("HumanoidRootPart")
-                                            local charDistance = hrp and (hrp.Position - targetPart.Position).Magnitude or 0
+                                            local charDistance = hrp and (hrp.Position - bestBone.Position).Magnitude or 0
                                             if charDistance < minDistanceToChar then
-                                                if IsVisible(targetPart, localChar) then
-                                                    minDistanceToChar = charDistance
-                                                    nearest = targetPart
-                                                end
+                                                minDistanceToChar = charDistance
+                                                nearest = bestBone
+                                            end
+                                        elseif env_global.AimbotPriority == "Health" then
+                                            if humanoid.Health < minHealth then
+                                                minHealth = humanoid.Health
+                                                nearest = bestBone
                                             end
                                         end
                                     end
@@ -209,25 +242,35 @@ function Combat.Init(Core)
         
         local target = Combat.GetNearestEnemy()
         if target then
+            lastTarget = target
             local targetPos = target.Position
+            local root = target.Parent:FindFirstChild("HumanoidRootPart")
             
-            -- 預測邏輯優化
-            if env_global.AimbotPrediction then
-                local root = target.Parent:FindFirstChild("HumanoidRootPart")
-                if root then
-                    targetPos = targetPos + (root.Velocity * env_global.AimbotPredictionAmount)
-                end
+            -- 強化預測與重力補償
+            if env_global.AimbotPrediction and root then
+                local dist = (Camera.CFrame.Position - targetPos).Magnitude
+                local timeToHit = dist / env_global.AimbotBulletSpeed
+                
+                -- 基礎預測 (速度 * 時間)
+                targetPos = targetPos + (root.Velocity * timeToHit)
+                
+                -- 重力補償 (0.5 * g * t^2)
+                local gravityCompensation = 0.5 * env_global.AimbotGravity * (timeToHit ^ 2)
+                targetPos = targetPos + Vector3.new(0, gravityCompensation, 0)
             end
             
             local currentCF = Camera.CFrame
             local targetCF = CFrame.new(currentCF.Position, targetPos)
             
-            -- 平滑度處理
+            -- 平滑度處理 (優化曲線)
             if env_global.AimbotSmoothness > 0 then
-                Camera.CFrame = currentCF:Lerp(targetCF, env_global.AimbotSmoothness)
+                local alpha = 1 / (env_global.AimbotSmoothness * 100)
+                Camera.CFrame = currentCF:Lerp(targetCF, alpha)
             else
                 Camera.CFrame = targetCF
             end
+        else
+            lastTarget = nil
         end
     end)
 
