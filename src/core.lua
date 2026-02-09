@@ -17,11 +17,21 @@ Core.getnamecallmethod = env_global.getnamecallmethod or (getgenv and getgenv().
 Core.hookfunction = env_global.hookfunction or (getgenv and getgenv().hookfunction)
 Core.Drawing = env_global.Drawing or (getgenv and getgenv().Drawing)
 Core.gethui = function()
+    -- 針對 Solara 等執行器的優化：優先嘗試 PlayerGui
+    local lp = game:GetService("Players").LocalPlayer
+    local playerGui = lp and lp:FindFirstChild("PlayerGui")
+    
+    if playerGui then
+        print("[Halol] 使用 PlayerGui 作為 GUI 容器 (對 Solara 更穩定)")
+        return playerGui
+    end
+
     local success, res = pcall(function() return env_global.gethui and env_global.gethui() end)
     if success and res then return res end
     success, res = pcall(function() return game:GetService("CoreGui") end)
     if success and res then return res end
-    return Core.LocalPlayer:WaitForChild("PlayerGui")
+    
+    return nil
 end
 Core.identifyexecutor = env_global.identifyexecutor or env_global.getexecutorname or function() return "Unknown" end
 Core.read_file = env_global.readfile or function(...) return nil end
@@ -167,6 +177,12 @@ end
 function Core.CreateGUI()
     if Core.MainGui then Core.MainGui:Destroy() end
 
+    local targetParent = Core.gethui()
+    if not targetParent then
+        warn("[Halol Error] 找不到可用的 GUI 容器 (PlayerGui/CoreGui)")
+        return
+    end
+
     local ScreenGui = Instance.new("ScreenGui")
     local MainFrame = Instance.new("Frame")
     local Title = Instance.new("TextLabel")
@@ -175,7 +191,7 @@ function Core.CreateGUI()
     local UIListLayout = Instance.new("UIListLayout")
 
     ScreenGui.Name = "HalolMainGui"
-    ScreenGui.Parent = Core.gethui()
+    ScreenGui.Parent = targetParent
     ScreenGui.ResetOnSpawn = false
     ScreenGui.DisplayOrder = 999
     ScreenGui.IgnoreGuiInset = true

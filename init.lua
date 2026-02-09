@@ -51,14 +51,14 @@ local function CheckForUpdates()
     local baseUrl = "https://raw.githubusercontent.com/akiopz/GUN-HUB/main/"
     local ok, onlineVersion = pcall(game.HttpGet, game, baseUrl .. "version.txt")
     
-    if ok and onlineVersion then
+    if ok and onlineVersion and not onlineVersion:find("404") then
         onlineVersion = onlineVersion:gsub("%s+", "")
         if onlineVersion ~= CURRENT_VERSION then
             print("[Halol] 偵測到新版本: " .. onlineVersion .. " (當前: " .. CURRENT_VERSION .. ")")
-            print("[Halol] 正在自動更新所有模組...")
-            -- 這裡可以選擇清除快取強制重新下載
             return true, onlineVersion
         end
+    else
+        print("[Halol] 無法獲取版本資訊或版本檔案不存在，跳過更新檢查。")
     end
     return false, CURRENT_VERSION
 end
