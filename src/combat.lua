@@ -82,6 +82,7 @@ function Combat.Init(Core)
     env_global.InfiniteAmmoEnabled = env_global.InfiniteAmmoEnabled or false
     env_global.RapidFireEnabled = env_global.RapidFireEnabled or false
     env_global.InstaReloadEnabled = env_global.InstaReloadEnabled or false
+    env_global.AimbotNPCs = env_global.AimbotNPCs or false
 
     -- [[ 註冊功能 ]]
     Core.RegisterFeature("TeleportKill", {
@@ -208,6 +209,15 @@ function Combat.Init(Core)
         end
     })
 
+    Core.RegisterFeature("AimbotNPCs", {
+        Name = "瞄準 NPC (Target NPCs)",
+        Description = "使自動瞄準與靜默自瞄支援非玩家角色 (NPC)",
+        Category = "Combat",
+        Callback = function(state)
+            env_global.AimbotNPCs = state
+        end
+    })
+
     Core.RegisterFeature("AimbotRage", {
         Name = "超強鎖頭 (Rage Lock)",
         Description = "瞬間鎖定、無視平滑度、進階預測",
@@ -285,6 +295,27 @@ function Combat.Init(Core)
         return isVisible
     end
 
+    -- [[ NPC 快取系統 ]]
+    local npcCache = {}
+    task.spawn(function()
+        while task.wait(2) do -- 每 2 秒掃描一次 NPC
+            if env_global.AimbotNPCs then
+                local newCache = {}
+                for _, obj in ipairs(workspace:GetDescendants()) do
+                    if obj:IsA("Model") and not Players:GetPlayerFromCharacter(obj) then
+                        local humanoid = obj:FindFirstChildOfClass("Humanoid")
+                        if humanoid and humanoid.Health > 0 then
+                            table.insert(newCache, obj)
+                        end
+                    end
+                end
+                npcCache = newCache
+            else
+                npcCache = {}
+            end
+        end
+    end)
+
     function Combat.GetNearestEnemy()
         local nearest = nil
         local maxDist = env_global.MagicBullet and 999999 or env_global.AimbotFOV
@@ -307,6 +338,7 @@ function Combat.Init(Core)
             end
         end
 
+        -- 1. 玩家掃描
         for _, player in ipairs(Players:GetPlayers()) do
             if player ~= lp then
                 local isTeam = (player.Team == lp.Team and player.Team ~= nil)
@@ -366,6 +398,41 @@ function Combat.Init(Core)
                                             if humanoid.Health < minHealth then
                                                 minHealth = humanoid.Health
                                                 nearest = bestBone
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        -- 2. NPC 掃描 (如果啟用)
+        if env_global.AimbotNPCs then
+            for _, obj in ipairs(npcCache) do
+                if obj.Parent then
+                    local humanoid = obj:FindFirstChildOfClass("Humanoid")
+                    if humanoid and humanoid.Health > 0 then
+                        local head = obj:FindFirstChild("Head") or obj:FindFirstChild("HumanoidRootPart")
+                        if head then
+                            if env_global.MagicBullet or IsVisible(head, localChar) then
+                                local screenPos, onScreen = Camera:WorldToViewportPoint(head.Position)
+                                if onScreen or env_global.MagicBullet then
+                                    local mouseDistance = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+                                    
+                                    if mouseDistance < maxDist or env_global.MagicBullet then
+                                        -- NPC 優先度與玩家共用 maxDist
+                                        if env_global.AimbotPriority == "Mouse" then
+                                            maxDist = mouseDistance
+                                            nearest = head
+                                        elseif env_global.AimbotPriority == "Distance" then
+                                            local hrp = localChar and localChar:FindFirstChild("HumanoidRootPart")
+                                            local charDistance = hrp and (hrp.Position - head.Position).Magnitude or 0
+                                            if charDistance < minDistanceToChar then
+                                                minDistanceToChar = charDistance
+                                                nearest = head
                                             end
                                         end
                                     end
