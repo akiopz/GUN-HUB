@@ -351,14 +351,29 @@ function Combat.Init(Core)
         -- 1. 玩家掃描
         for _, player in ipairs(Players:GetPlayers()) do
             if player ~= lp then
-                local isTeam = (player.Team == lp.Team and player.Team ~= nil)
+                -- 強化隊友檢查：同時檢查 Team 物件與 TeamColor (防止部分遊戲 Team 物件無效)
+                local isTeam = false
+                if player.Team == lp.Team and player.Team ~= nil then
+                    isTeam = true
+                elseif player.TeamColor == lp.TeamColor and player.TeamColor ~= nil then
+                    isTeam = true
+                end
+
                 -- 只有在關閉隊友檢查或是對方不是隊友時才繼續
                 if not env_global.TeamCheck or not isTeam then
                     local char = player.Character
                     if char then
                         local humanoid = char:FindFirstChildOfClass("Humanoid")
                         if humanoid and humanoid.Health > 0 then
-                            -- 多骨骼掃描邏輯
+                            -- [[ 額外隊友檢查：檢查名字標籤顏色或特定屬性 (針對無原生 Team 系統的遊戲) ]]
+                            local isActuallyTeammate = false
+                            -- 某些遊戲會把隊友放在特定的 Folder，或是名字標籤有特定顏色
+                            -- 這裡可以擴展更多的檢查邏輯
+                            
+                            if isActuallyTeammate then isTeam = true end
+                            
+                            if not env_global.TeamCheck or not isTeam then
+                                -- 多骨骼掃描邏輯
                             local bones = {env_global.AimbotTargetPart, "UpperTorso", "HumanoidRootPart", "LowerTorso"}
                             local bestBone = nil
                             
@@ -555,8 +570,26 @@ function Combat.Init(Core)
         oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
             local method = getnamecallmethod()
             local args = {...}
+            local remoteName = tostring(self)
 
             if not checkcaller() then
+                -- 自動射擊增強：攔截並重定向射擊 Remote
+                if env_global.AutoShoot and (method == "FireServer" or method == "InvokeServer") then
+                    if remoteName:lower():find("fire") or remoteName:lower():find("shoot") or remoteName:lower():find("hit") then
+                        local target = Combat.GetNearestEnemy()
+                        if target and env_global.AimbotEnabled then
+                            -- 如果檢測到正在嘗試射擊，將參數中的位置或目標重定向到自瞄目標
+                            for i, v in ipairs(args) do
+                                if typeof(v) == "Vector3" then
+                                    args[i] = target.Position
+                                elseif typeof(v) == "Instance" and v:IsA("BasePart") then
+                                    args[i] = target
+                                end
+                            end
+                            return oldNamecall(self, unpack(args))
+                        end
+                    end
+                end
                 -- 靜默自瞄 & 魔法子彈 (Raycast 繞過)
                 if env_global.SilentAimEnabled or env_global.MagicBullet then
                     if method == "Raycast" then
@@ -814,13 +847,19 @@ function Combat.Init(Core)
                 Camera.CFrame = targetCF
             end
 
-            -- 自動射擊邏輯
+            -- [[ 增強型自動射擊邏輯 ]]
             if env_global.AutoShoot then
                 local weapon = GetCurrentWeapon()
                 if weapon then
-                    local remote = weapon:FindFirstChild("RemoteEvent") or weapon:FindFirstChildOfClass("RemoteEvent") or weapon:FindFirstChild("Fire")
+                    -- 擴展遠程事件搜索範圍
+                    local remote = weapon:FindFirstChild("RemoteEvent") 
+                        or weapon:FindFirstChildOfClass("RemoteEvent") 
+                        or weapon:FindFirstChild("Fire")
+                        or weapon:FindFirstChild("Shoot")
+                        or weapon:FindFirstChild("Input") -- 某些遊戲使用 Input 事件
+                        or (weapon:FindFirstChild("Remotes") and weapon.Remotes:FindFirstChildOfClass("RemoteEvent"))
+
                     if remote then
-                        -- 修正：在大陀螺或靜默自瞄時，確保射擊方向正確重定向
                         local targetPos = target.Position
                         
                         -- 如果有暴力模式，自動打頭
@@ -828,7 +867,18 @@ function Combat.Init(Core)
                             targetPos = target.Position
                         end
                         
+                        -- 模擬不同遊戲的射擊參數
+                        -- 1. 直接位置, 2. 目標對象, 3. 包含射擊向量的表
                         remote:FireServer(targetPos)
+                        
+                        -- 某些遊戲需要發送 Raycast 結果
+                        pcall(function()
+                            remote:FireServer({
+                                [1] = targetPos,
+                                ["Hit"] = target,
+                                ["Distance"] = (lp.Character.Head.Position - targetPos).Magnitude
+                            })
+                        end)
                     end
                 end
             end
