@@ -313,6 +313,15 @@ function Core.CreateGUI()
     MainFrame.Visible = true
     ScreenGui.Enabled = true
 
+    -- [[ 快捷鍵監聽 (INS) ]]
+    Core.UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if not gameProcessed and input.KeyCode == Enum.KeyCode.Insert then
+            MainFrame.Visible = not MainFrame.Visible
+            -- 播放切換音效或通知 (可選)
+            print("[Halol] GUI 狀態已切換: " .. (MainFrame.Visible and "顯示" or "隱藏"))
+        end
+    end)
+
     Core.MainGui = ScreenGui
     print("[Halol] GUI 已創建並強制顯示")
 end
