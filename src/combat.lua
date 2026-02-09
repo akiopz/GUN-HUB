@@ -19,6 +19,9 @@ function Combat.Init(Core)
     env_global.KillAll = env_global.KillAll or false
     env_global.KillAllDelay = env_global.KillAllDelay or 0.1
     env_global.BulletTeleport = env_global.BulletTeleport or false
+    env_global.BulletMultiTarget = env_global.BulletMultiTarget or false
+    env_global.BulletCritical = env_global.BulletCritical or false
+    env_global.MagicBullet = env_global.MagicBullet or false
     
     -- [[ 槍枝偵測邏輯 ]]
     local function GetCurrentWeapon()
@@ -346,21 +349,53 @@ function Combat.Init(Core)
                 end
                 
                 -- 通用 Remote 繞過 (防止行為檢測)-- [[ 執行靜默自瞄 / 子彈傳送 ]]
-                if method == "FireServer" or method == "InvokeServer" then
-                    -- 1. 子彈傳送 (Bullet Teleport / Kill All)
-                    if env_global.KillAll or env_global.BulletTeleport then
-                        local target = GetClosestPlayer()
-                        if target and target.Character and target.Character:FindFirstChild("Head") then
-                            -- 將射擊目標強制重定向到敵人頭部，無論玩家瞄準哪裡
-                            for i, arg in ipairs(args) do
-                                if typeof(arg) == "Vector3" then
-                                    args[i] = target.Character.Head.Position
-                                elseif typeof(arg) == "CFrame" then
-                                    args[i] = CFrame.new(arg.Position, target.Character.Head.Position)
-                                end
-                            end
-                        end
-                    end
+                 if method == "FireServer" or method == "InvokeServer" then
+                     -- 1. 子彈傳送 (Bullet Teleport / Kill All / Multi-Target)
+                     if env_global.KillAll or env_global.BulletTeleport or env_global.BulletMultiTarget then
+                         local targets = {}
+                         if env_global.BulletMultiTarget then
+                             -- 收集 FOV 內或全圖所有敵人
+                             for _, p in ipairs(Players:GetPlayers()) do
+                                 if p ~= lp and p.Character and p.Character:FindFirstChild("Head") then
+                                     local hum = p.Character:FindFirstChildOfClass("Humanoid")
+                                     local isTeammate = (p.Team == lp.Team and p.Team ~= nil)
+                                     if hum and hum.Health > 0 and (not env_global.TeamCheck or not isTeammate) then
+                                         table.insert(targets, p)
+                                     end
+                                 end
+                             end
+                         else
+                             local closest = GetClosestPlayer()
+                             if closest then table.insert(targets, closest) end
+                         end
+
+                         if #targets > 0 then
+                             -- 子彈爆擊 (重複發送封包)
+                             local loopCount = env_global.BulletCritical and 5 or 1
+                             for _ = 1, loopCount do
+                                 for _, target in ipairs(targets) do
+                                     local headPos = target.Character.Head.Position
+                                     local newArgs = {table.unpack(args)}
+                                     
+                                     for i, arg in ipairs(newArgs) do
+                                         if typeof(arg) == "Vector3" then
+                                             newArgs[i] = headPos
+                                         elseif typeof(arg) == "CFrame" then
+                                             newArgs[i] = CFrame.new(arg.Position, headPos)
+                                         end
+                                     end
+                                     
+                                     -- 魔法子彈：繞過 Raycast
+                                     if env_global.MagicBullet then
+                                         -- 這裡可以加入特定遊戲的 Raycast 繞過邏輯
+                                     end
+
+                                     self[method](self, table.unpack(newArgs))
+                                 end
+                             end
+                             return -- 攔截原始調用，因為我們已經手動發送了
+                         end
+                     end
 
                     -- 2. 狙擊槍快切
                     if env_global.AimbotQuickSwitch then
@@ -539,6 +574,24 @@ function Combat.Init(Core)
         Name = "子彈傳送 (Bullet Teleport)",
         Category = "Rage",
         Callback = function(state) env_global.BulletTeleport = state end
+    })
+
+    Core.RegisterFeature("BulletMultiTarget", {
+        Name = "多目標傳送 (Multi-Target)",
+        Category = "Rage",
+        Callback = function(state) env_global.BulletMultiTarget = state end
+    })
+
+    Core.RegisterFeature("BulletCritical", {
+        Name = "子彈爆擊 (Bullet Critical)",
+        Category = "Rage",
+        Callback = function(state) env_global.BulletCritical = state end
+    })
+
+    Core.RegisterFeature("MagicBullet", {
+        Name = "魔法子彈 (Magic Bullet)",
+        Category = "Rage",
+        Callback = function(state) env_global.MagicBullet = state end
     })
 
     -- [[ 全圖殺敵核心邏輯 ]]
