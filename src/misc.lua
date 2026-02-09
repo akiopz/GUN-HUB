@@ -26,6 +26,9 @@ function Misc.Init(Core)
     env_global.FlySpeed = env_global.FlySpeed or 50
     
     env_global.Noclip = env_global.Noclip or false
+    env_global.NoSlow = env_global.NoSlow or false
+    env_global.DesyncEnabled = env_global.DesyncEnabled or false
+    env_global.DesyncAmount = env_global.DesyncAmount or 5
     env_global.Spider = env_global.Spider or false
     env_global.Bhop = env_global.Bhop or false
 
@@ -36,10 +39,43 @@ function Misc.Init(Core)
         Callback = function(state) env_global.WalkSpeedEnabled = state end
     })
 
+    Core.UI.AddSlider("WalkSpeedValue", {
+        Name = "行走速度數值",
+        Category = "Misc",
+        Min = 16,
+        Max = 300,
+        Default = env_global.WalkSpeed,
+        Callback = function(v) env_global.WalkSpeed = v end
+    })
+
     Core.RegisterFeature("CFrameSpeedEnabled", {
         Name = "瞬移加速 (CFrame Speed)",
         Category = "Misc",
         Callback = function(state) env_global.CFrameSpeedEnabled = state end
+    })
+
+    Core.UI.AddSlider("CFrameSpeedValue", {
+        Name = "瞬移速度數值",
+        Category = "Misc",
+        Min = 1,
+        Max = 50,
+        Default = env_global.CFrameSpeed,
+        Callback = function(v) env_global.CFrameSpeed = v end
+    })
+    
+    Core.RegisterFeature("JumpPowerEnabled", {
+        Name = "跳躍加強 (Jump Power)",
+        Category = "Misc",
+        Callback = function(state) env_global.JumpPowerEnabled = state end
+    })
+
+    Core.UI.AddSlider("JumpPowerValue", {
+        Name = "跳躍高度數值",
+        Category = "Misc",
+        Min = 50,
+        Max = 500,
+        Default = env_global.JumpPower,
+        Callback = function(v) env_global.JumpPower = v end
     })
 
     Core.RegisterFeature("InfJump", {
@@ -54,10 +90,74 @@ function Misc.Init(Core)
         Callback = function(state) env_global.FlyEnabled = state end
     })
 
+    Core.UI.AddSlider("FlySpeedValue", {
+        Name = "飛行速度數值",
+        Category = "Misc",
+        Min = 10,
+        Max = 500,
+        Default = env_global.FlySpeed,
+        Callback = function(v) env_global.FlySpeed = v end
+    })
+
+    Core.RegisterFeature("FullBright", {
+        Name = "全亮模式 (Full Bright)",
+        Category = "Visuals",
+        Callback = function(state)
+            env_global.FullBright = state
+            if state then
+                game:GetService("Lighting").Brightness = 2
+                game:GetService("Lighting").ClockTime = 14
+                game:GetService("Lighting").FogEnd = 100000
+                game:GetService("Lighting").GlobalShadows = false
+            else
+                -- 恢復預設 (概略值)
+                game:GetService("Lighting").GlobalShadows = true
+            end
+        end
+    })
+
+    Core.RegisterFeature("ServerHop", {
+        Name = "更換伺服器 (Server Hop)",
+        Category = "Misc",
+        Callback = function()
+            local HttpService = game:GetService("HttpService")
+            local TeleportService = game:GetService("TeleportService")
+            local servers = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")).data
+            for _, s in ipairs(servers) do
+                if s.playing < s.maxPlayers and s.id ~= game.JobId then
+                    TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id)
+                    break
+                end
+            end
+        end
+    })
+
+    Core.RegisterFeature("Rejoin", {
+        Name = "重新加入 (Rejoin)",
+        Category = "Misc",
+        Callback = function()
+            game:GetService("TeleportService"):Teleport(game.PlaceId, lp)
+        end
+    })
+
     Core.RegisterFeature("Noclip", {
         Name = "穿牆 (Noclip)",
         Category = "Misc",
         Callback = function(state) env_global.Noclip = state end
+    })
+    
+    Core.RegisterFeature("NoSlow", {
+        Name = "無減速 (No Slow)",
+        Description = "防止開鏡、射擊或受傷時的移動減速",
+        Category = "Misc",
+        Callback = function(state) env_global.NoSlow = state end
+    })
+
+    Core.RegisterFeature("Desync", {
+        Name = "回朔/脫節 (Desync)",
+        Description = "使敵人在其視角中看到你的位置滯後或回朔",
+        Category = "Misc",
+        Callback = function(state) env_global.DesyncEnabled = state end
     })
 
     Core.RegisterFeature("Spider", {
@@ -121,6 +221,14 @@ function Misc.Init(Core)
             hum.JumpPower = env_global.JumpPower
         end
 
+        -- 3.5 無減速 (No Slow)
+        if env_global.NoSlow then
+            local targetSpeed = env_global.WalkSpeedEnabled and env_global.WalkSpeed or 16
+            if hum.WalkSpeed < targetSpeed then
+                hum.WalkSpeed = targetSpeed
+            end
+        end
+
         -- 4. 飛行模式 (Fly)
         if env_global.FlyEnabled then
             local moveDir = hum.MoveDirection
@@ -166,6 +274,18 @@ function Misc.Init(Core)
         -- 7. Bhop (連跳)
         if env_global.Bhop and hum.MoveDirection.Magnitude > 0 and hum.FloorMaterial ~= Enum.Material.Air then
             hum:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+
+        -- 8. 回朔/脫節 (Desync)
+        if env_global.DesyncEnabled then
+            -- 透過交替修改 Velocity 與位置偏移，使伺服器接收到的座標產生「回朔」感
+            local desyncOffset = Vector3.new(math.random(-50, 50), 0, math.random(-50, 50))
+            local oldCF = hrp.CFrame
+            
+            -- 暫時將真實位置移開，隨即移回，干擾網路同步
+            hrp.CFrame = oldCF * CFrame.new(desyncOffset)
+            RunService.RenderStepped:Wait()
+            hrp.CFrame = oldCF
         end
     end)
 

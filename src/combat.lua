@@ -13,6 +13,8 @@ function Combat.Init(Core)
     local UserInputService = Core.UserInputService
     local RunService = Core.RunService
 
+    local lastTarget = nil -- 用於黏性瞄準的快取目標
+
     -- [[ 配置初始化 ]]
     env_global.AimbotEnabled = env_global.AimbotEnabled or false
     env_global.AimbotQuickSwitch = env_global.AimbotQuickSwitch or false
@@ -22,8 +24,11 @@ function Combat.Init(Core)
     env_global.BulletMultiTarget = env_global.BulletMultiTarget or false
     env_global.BulletCritical = env_global.BulletCritical or false
     env_global.MagicBullet = env_global.MagicBullet or false
+    env_global.DamageMultiplierEnabled = env_global.DamageMultiplierEnabled or false
+    env_global.DamageMultiplier = env_global.DamageMultiplier or 2
     
-    -- [[ 槍枝偵測邏輯 ]]
+    env_global.NoRecoilEnabled = env_global.NoRecoilEnabled or false
+    env_global.NoSpreadEnabled = env_global.NoSpreadEnabled or false
     local function GetCurrentWeapon()
         local char = lp.Character
         if not char then return nil end
@@ -60,13 +65,11 @@ function Combat.Init(Core)
     env_global.AimbotGravity = env_global.AimbotGravity or 196.2 -- 用於重力補償
     env_global.AimbotMultiBone = env_global.AimbotMultiBone or true -- 多骨骼掃描
     env_global.AimbotSticky = env_global.AimbotSticky or false -- 黏性瞄準
+    env_global.AimbotRageMode = env_global.AimbotRageMode or false -- 暴力鎖頭模式
+    env_global.AimbotPingCompensation = env_global.AimbotPingCompensation or true -- 延遲補償
     env_global.SilentAimEnabled = env_global.SilentAimEnabled or false
     env_global.SilentAimFOV = env_global.SilentAimFOV or 200
     env_global.SilentAimHitChance = env_global.SilentAimHitChance or 100
-    env_global.NoRecoilEnabled = env_global.NoRecoilEnabled or false
-    env_global.NoSpreadEnabled = env_global.NoSpreadEnabled or false
-    env_global.RapidFireEnabled = env_global.RapidFireEnabled or false
-    env_global.KillAllEnabled = env_global.KillAllEnabled or false
     env_global.HitboxExpanderEnabled = env_global.HitboxExpanderEnabled or false
     env_global.HitboxSize = env_global.HitboxSize or 5
     env_global.SpinbotEnabled = env_global.SpinbotEnabled or false
@@ -76,6 +79,9 @@ function Combat.Init(Core)
     env_global.TeleportKillEnabled = env_global.TeleportKillEnabled or false
     env_global.InstaKillEnabled = env_global.InstaKillEnabled or false
     env_global.ShieldEnabled = env_global.ShieldEnabled or false
+    env_global.InfiniteAmmoEnabled = env_global.InfiniteAmmoEnabled or false
+    env_global.RapidFireEnabled = env_global.RapidFireEnabled or false
+    env_global.InstaReloadEnabled = env_global.InstaReloadEnabled or false
 
     -- [[ 註冊功能 ]]
     Core.RegisterFeature("TeleportKill", {
@@ -126,15 +132,63 @@ function Combat.Init(Core)
         end
     })
 
+    Core.RegisterFeature("InfiniteAmmo", {
+        Name = "無限子彈 (Inf Ammo)",
+        Category = "Combat",
+        Callback = function(state)
+            env_global.InfiniteAmmoEnabled = state
+        end
+    })
+
+    Core.RegisterFeature("InstaReload", {
+        Name = "瞬間換彈 (Insta Reload)",
+        Category = "Combat",
+        Callback = function(state)
+            env_global.InstaReloadEnabled = state
+        end
+    })
+
     Core.RegisterFeature("KillAll", {
         Name = "全地圖殺敵 (Kill All)",
         Category = "Rage",
         Callback = function(state)
-            env_global.KillAllEnabled = state
+            env_global.KillAll = state
             if state then
                 Core.Notify("暴力模式", "全地圖殺敵已啟動，請謹慎使用", 3)
             end
         end
+    })
+
+    Core.RegisterFeature("BulletTeleport", {
+        Name = "子彈傳送 (Bullet Teleport)",
+        Category = "Rage",
+        Callback = function(state) env_global.BulletTeleport = state end
+    })
+
+    Core.RegisterFeature("BulletMultiTarget", {
+        Name = "多目標傳送 (Multi-Target)",
+        Category = "Rage",
+        Callback = function(state) env_global.BulletMultiTarget = state end
+    })
+
+    Core.RegisterFeature("BulletCritical", {
+        Name = "子彈爆擊 (Bullet Critical)",
+        Category = "Rage",
+        Callback = function(state) env_global.BulletCritical = state end
+    })
+
+    Core.RegisterFeature("DamageMultiplier", {
+        Name = "傷害增加 (Damage Multiplier)",
+        Description = "倍增你的射擊傷害",
+        Category = "Rage",
+        Callback = function(state) env_global.DamageMultiplierEnabled = state end
+    })
+
+    Core.RegisterFeature("MagicBullet", {
+        Name = "魔法子彈 (Magic Bullet)",
+        Description = "子彈自動追蹤、無視障礙物且無視距離限制",
+        Category = "Rage",
+        Callback = function(state) env_global.MagicBullet = state end
     })
 
     Core.RegisterFeature("HitboxExpander", {
@@ -151,6 +205,19 @@ function Combat.Init(Core)
         Callback = function(state)
             env_global.AimbotEnabled = state
         
+        end
+    })
+
+    Core.RegisterFeature("AimbotRage", {
+        Name = "超強鎖頭 (Rage Lock)",
+        Description = "瞬間鎖定、無視平滑度、進階預測",
+        Category = "Combat",
+        Callback = function(state)
+            env_global.AimbotRageMode = state
+            if state then
+                env_global.AimbotSmoothness = 0
+                env_global.AimbotSticky = true
+            end
         end
     })
 
@@ -220,7 +287,7 @@ function Combat.Init(Core)
 
     function Combat.GetNearestEnemy()
         local nearest = nil
-        local maxDist = env_global.AimbotFOV
+        local maxDist = env_global.MagicBullet and 999999 or env_global.AimbotFOV
         local minDistanceToChar = math.huge
         local minHealth = math.huge
         local mousePos = UserInputService:GetMouseLocation()
@@ -255,9 +322,9 @@ function Combat.Init(Core)
                             for _, boneName in ipairs(bones) do
                                 local bone = char:FindFirstChild(boneName)
                                 if bone then
-                                    if IsVisible(bone, localChar) then
+                                    if env_global.MagicBullet or IsVisible(bone, localChar) then
                                         bestBone = bone
-                                        break -- 找到第一個可見骨骼就停止
+                                        break -- 找到第一個可用骨骼就停止
                                     end
                                     if not env_global.AimbotMultiBone then break end
                                 end
@@ -265,9 +332,25 @@ function Combat.Init(Core)
 
                             if bestBone then
                                 local screenPos, onScreen = Camera:WorldToViewportPoint(bestBone.Position)
-                                if onScreen then
+                                if onScreen or env_global.MagicBullet then
                                     local mouseDistance = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
-                                    if mouseDistance < maxDist then
+                                    
+                                    -- 強化：預測補償
+                                    local targetPos = bestBone.Position
+                                    if env_global.AimbotPrediction then
+                                        local velocity = humanoid.RootPart and humanoid.RootPart.Velocity or Vector3.new(0,0,0)
+                                        local ping = lp:GetNetworkPing()
+                                        local distance = (targetPos - Camera.CFrame.Position).Magnitude
+                                        local timeToHit = (distance / env_global.AimbotBulletSpeed) + ping
+                                        
+                                        targetPos = targetPos + (velocity * timeToHit)
+                                        
+                                        -- 重力補償
+                                        local gravityCompensation = 0.5 * env_global.AimbotGravity * (timeToHit ^ 2)
+                                        targetPos = targetPos + Vector3.new(0, gravityCompensation, 0)
+                                    end
+
+                                    if mouseDistance < maxDist or env_global.MagicBullet then
                                         -- 優先度邏輯
                                         if env_global.AimbotPriority == "Mouse" then
                                             maxDist = mouseDistance
@@ -293,7 +376,92 @@ function Combat.Init(Core)
                 end
             end
         end
+        lastTarget = nearest -- 更新快取目標
         return nearest
+    end
+
+    Core.UI.AddSlider("SilentAimHitChance", {
+        Name = "靜默自瞄命中率",
+        Category = "Rage",
+        Min = 0,
+        Max = 100,
+        Default = env_global.SilentAimHitChance,
+        Callback = function(v) env_global.SilentAimHitChance = v end
+    })
+
+    Core.UI.AddSlider("DamageMultiplier", {
+        Name = "傷害倍率 (Damage Multi)",
+        Category = "Rage",
+        Min = 1,
+        Max = 10,
+        Default = env_global.DamageMultiplier,
+        Callback = function(v) env_global.DamageMultiplier = v end
+    })
+
+    Core.UI.AddSlider("HitboxSize", {
+        Name = "碰撞箱大小 (Hitbox)",
+        Category = "Rage",
+        Min = 1,
+        Max = 50,
+        Default = env_global.HitboxSize,
+        Callback = function(v) env_global.HitboxSize = v end
+    })
+
+    Core.UI.AddSlider("SpinbotSpeed", {
+        Name = "大陀螺速度 (Spin)",
+        Category = "Rage",
+        Min = 1,
+        Max = 500,
+        Default = env_global.SpinbotSpeed,
+        Callback = function(v) env_global.SpinbotSpeed = v end
+    })
+
+    Core.UI.AddSlider("KillAllDelay", {
+        Name = "全圖殺敵間隔 (Delay)",
+        Category = "Rage",
+        Min = 0,
+        Max = 100,
+        Default = env_global.KillAllDelay * 100,
+        Callback = function(v) env_global.KillAllDelay = v / 100 end
+    })
+
+    Core.UI.AddSlider("AimbotFOV", {
+        Name = "自瞄範圍 (FOV)",
+        Category = "Combat",
+        Min = 10,
+        Max = 1000,
+        Default = env_global.AimbotFOV,
+        Callback = function(v) env_global.AimbotFOV = v end
+    })
+
+    Core.UI.AddSlider("AimbotSmooth", {
+        Name = "自瞄平滑度 (Smoothness)",
+        Category = "Combat",
+        Min = 0,
+        Max = 50,
+        Default = env_global.AimbotSmoothness * 100,
+        Callback = function(v) env_global.AimbotSmoothness = v / 100 end
+    })
+
+    Core.RegisterFeature("AutoShoot", {
+        Name = "自動射擊 (Auto Shoot)",
+        Category = "Combat",
+        Callback = function(state) env_global.AutoShoot = state end
+    })
+
+    -- [[ 超遠子彈優化 ]]
+    local function OptimizeBullet(args, targetPos)
+        for i, arg in ipairs(args) do
+            if typeof(arg) == "Vector3" then
+                -- 修正起點與方向，確保能打到超遠處
+                args[i] = targetPos
+            elseif typeof(arg) == "CFrame" then
+                args[i] = CFrame.new(arg.Position, targetPos)
+            elseif typeof(arg) == "Ray" then
+                args[i] = Ray.new(arg.Origin, (targetPos - arg.Origin).Unit * 10000)
+            end
+        end
+        return args
     end
 
     -- [[ 靜默自瞄核心 Hook ]]
@@ -302,7 +470,6 @@ function Combat.Init(Core)
         local getnamecallmethod = Core.getnamecallmethod
         local newcclosure = Core.newcclosure
         local checkcaller = Core.checkcaller
-        local setconstant = debug.setconstant or (syn and syn.set_constant)
 
         if not hookmetamethod then return end
 
@@ -312,19 +479,31 @@ function Combat.Init(Core)
             local args = {...}
 
             if not checkcaller() then
-                -- 靜默自瞄
-                if env_global.SilentAimEnabled then
+                -- 靜默自瞄 & 魔法子彈 (Raycast 繞過)
+                if env_global.SilentAimEnabled or env_global.MagicBullet then
                     if method == "Raycast" then
                         local target = Combat.GetNearestEnemy()
-                        if target and math.random(1, 100) <= env_global.SilentAimHitChance then
-                            args[2] = (target.Position - args[1]).Unit * 1000
+                        if target and (env_global.MagicBullet or math.random(1, 100) <= env_global.SilentAimHitChance) then
+                            local origin = args[1]
+                            local targetPos = target.Position
+                            
+                            -- 魔法子彈 & 超遠射程優化
+                            if env_global.MagicBullet then
+                                local params = RaycastParams.new()
+                                params.FilterType = Enum.RaycastFilterType.Include
+                                params.FilterDescendantsInstances = {target.Parent}
+                                args[3] = params
+                            end
+
+                            local direction = (targetPos - origin).Unit * 15000 -- 極大化射程
+                            args[2] = direction
                             return oldNamecall(self, unpack(args))
                         end
-                    elseif method == "FindPartOnRay" or method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" then
+                    elseif method == "FindPartOnRay" or method == "FindPartOnRayWithIgnoreList" then
                         local target = Combat.GetNearestEnemy()
-                        if target and math.random(1, 100) <= env_global.SilentAimHitChance then
+                        if target and (env_global.MagicBullet or math.random(1, 100) <= env_global.SilentAimHitChance) then
                             local origin = args[1].Origin
-                            local direction = (target.Position - origin).Unit * 1000
+                            local direction = (target.Position - origin).Unit * 15000
                             args[1] = Ray.new(origin, direction)
                             return oldNamecall(self, unpack(args))
                         end
@@ -332,70 +511,83 @@ function Combat.Init(Core)
                 end
 
                 -- 無後座力 & 無擴散 (透過 Namecall 攔截常見屬性修改)
-                if method == "FireServer" and (env_global.NoRecoil or env_global.NoSpread) then
+                if method == "FireServer" then
                     local remoteName = self.Name:lower()
-                    -- 更加精確的攔截邏輯，避免誤傷正常遊戲邏輯
-                    if remoteName:find("recoil") or remoteName:find("spread") or remoteName:find("kick") or remoteName:find("shake") then
-                        return
-                    end
-                    
-                    -- 檢查參數中是否包含敏感數值 (如後座力系數)
-                    for i, v in ipairs(args) do
-                        if type(v) == "number" and v > 0 and (remoteName:find("weapon") or remoteName:find("gun")) then
-                            -- 如果數值看起來像後座力參數，則將其修改為 0
-                            args[i] = 0
+
+                    -- 傷害增加 (Damage Multiplier)
+                    if env_global.DamageMultiplierEnabled then
+                        if remoteName:find("damage") or remoteName:find("hit") or remoteName:find("weapon") then
+                            for i, v in ipairs(args) do
+                                if type(v) == "number" and v > 0 then
+                                    args[i] = v * env_global.DamageMultiplier
+                                end
+                            end
+                            return oldNamecall(self, unpack(args))
                         end
                     end
-                end
-                
-                -- 通用 Remote 繞過 (防止行為檢測)-- [[ 執行靜默自瞄 / 子彈傳送 ]]
-                 if method == "FireServer" or method == "InvokeServer" then
-                     -- 1. 子彈傳送 (Bullet Teleport / Kill All / Multi-Target)
-                     if env_global.KillAll or env_global.BulletTeleport or env_global.BulletMultiTarget then
-                         local targets = {}
-                         if env_global.BulletMultiTarget then
-                             -- 收集 FOV 內或全圖所有敵人
-                             for _, p in ipairs(Players:GetPlayers()) do
-                                 if p ~= lp and p.Character and p.Character:FindFirstChild("Head") then
-                                     local hum = p.Character:FindFirstChildOfClass("Humanoid")
-                                     local isTeammate = (p.Team == lp.Team and p.Team ~= nil)
-                                     if hum and hum.Health > 0 and (not env_global.TeamCheck or not isTeammate) then
-                                         table.insert(targets, p)
-                                     end
-                                 end
-                             end
-                         else
-                             local closest = GetClosestPlayer()
-                             if closest then table.insert(targets, closest) end
-                         end
 
-                         if #targets > 0 then
-                             -- 子彈爆擊 (重複發送封包)
-                             local loopCount = env_global.BulletCritical and 5 or 1
-                             for _ = 1, loopCount do
-                                 for _, target in ipairs(targets) do
-                                     local headPos = target.Character.Head.Position
-                                     local newArgs = {table.unpack(args)}
-                                     
-                                     for i, arg in ipairs(newArgs) do
-                                         if typeof(arg) == "Vector3" then
-                                             newArgs[i] = headPos
-                                         elseif typeof(arg) == "CFrame" then
-                                             newArgs[i] = CFrame.new(arg.Position, headPos)
-                                         end
-                                     end
-                                     
-                                     -- 魔法子彈：繞過 Raycast
-                                     if env_global.MagicBullet then
-                                         -- 這裡可以加入特定遊戲的 Raycast 繞過邏輯
-                                     end
+                    if (env_global.NoRecoilEnabled or env_global.NoSpreadEnabled) then
+                        -- 更加精確的攔截邏輯，避免誤傷正常遊戲邏輯
+                        if remoteName:find("recoil") or remoteName:find("spread") or remoteName:find("kick") or remoteName:find("shake") then
+                            return
+                        end
+                        
+                        -- 檢查參數中是否包含敏感數值 (如後座力系數)
+                        for i, v in ipairs(args) do
+                            if type(v) == "number" and v > 0 and (remoteName:find("weapon") or remoteName:find("gun")) then
+                                -- 如果數值看起來像後座力參數，則將其修改為 0
+                                args[i] = 0
+                            end
+                        end
+                    end
+                end -- 閉合 if method == "FireServer" (Line 495)
 
-                                     self[method](self, table.unpack(newArgs))
-                                 end
-                             end
-                             return -- 攔截原始調用，因為我們已經手動發送了
-                         end
-                     end
+                -- 通用 Remote 繞過 (防止行為檢測)
+                if method == "FireServer" or method == "InvokeServer" then
+                    -- 1. 子彈傳送 (Bullet Teleport / Kill All / Multi-Target)
+                    if env_global.KillAll or env_global.BulletTeleport or env_global.BulletMultiTarget then
+                        local targets = {}
+                        if env_global.BulletMultiTarget then
+                            for _, p in ipairs(Players:GetPlayers()) do
+                                if p ~= lp and p.Character and p.Character:FindFirstChild("Head") then
+                                    table.insert(targets, p.Character.Head)
+                                end
+                            end
+                        else
+                            local t = Combat.GetNearestEnemy()
+                            if t then table.insert(targets, t) end
+                        end
+
+                        for _, target in ipairs(targets) do
+                            local origin = Camera.CFrame.Position
+                            local targetPos = target.Position
+                            
+                            -- 魔法子彈優化：無視障礙物且極大化射程 (支援大地圖)
+                            local newArgs = {unpack(args)}
+                            local remoteName = self.Name:lower()
+                            if remoteName:find("bullet") or remoteName:find("shoot") or remoteName:find("fire") then
+                                -- 假設參數 2 是目標位置或射線方向
+                                local direction = (targetPos - origin).Unit * 15000 -- 極大化射程
+                                newArgs[2] = direction
+                                
+                                -- 爆擊與傷害加倍
+                                if env_global.BulletCritical then
+                                    newArgs[3] = 100 -- 假設參數 3 是爆擊率
+                                end
+                                
+                                if env_global.DamageMultiplierEnabled then
+                                    task.spawn(function()
+                                        for i = 1, env_global.DamageMultiplier do
+                                            self[method](self, unpack(newArgs))
+                                        end
+                                    end)
+                                else
+                                    self[method](self, unpack(newArgs))
+                                end
+                            end
+                        end
+                        return -- 攔截原始調用，因為我們已經手動發送了
+                    end
 
                     -- 2. 狙擊槍快切
                     if env_global.AimbotQuickSwitch then
@@ -412,8 +604,8 @@ function Combat.Init(Core)
                     if remoteName:find("check") or remoteName:find("detect") or remoteName:find("verify") then
                         return -- 吞掉所有疑似檢查的請求
                     end
-                end
-            end
+                end -- 閉合 if method == "FireServer" or method == "InvokeServer" (Line 527)
+            end -- 閉合 if not checkcaller() (Line 462)
             return oldNamecall(self, ...)
         end))
 
@@ -433,10 +625,21 @@ function Combat.Init(Core)
                 end
                 
                 -- 無後座力 / 無擴散 屬性偽造
-                if env_global.NoRecoil and (key == "Recoil" or key == "RecoilControl" or key == "VisualRecoil") then
+                if env_global.NoRecoilEnabled and (key == "Recoil" or key == "RecoilControl" or key == "VisualRecoil") then
                     return 0
                 end
-                if env_global.NoSpread and (key == "Spread" or key == "Accuracy" or key == "Inaccuracy") then
+                if env_global.NoSpreadEnabled and (key == "Spread" or key == "Accuracy" or key == "Inaccuracy") then
+                    return 0
+                end
+
+                -- 子彈修改 (無限子彈 / 快速射擊)
+                if env_global.InfiniteAmmoEnabled and (key == "Ammo" or key == "CurrentAmmo" or key == "Clip" or key == "Mag") then
+                    return 999
+                end
+                if env_global.RapidFireEnabled and (key == "FireRate" or key == "Cooldown" or key == "Delay") then
+                    return 0
+                end
+                if env_global.InstaReloadEnabled and (key == "ReloadTime" or key == "ReloadSpeed") then
                     return 0
                 end
             end
@@ -446,10 +649,21 @@ function Combat.Init(Core)
         local oldNewIndex
         oldNewIndex = hookmetamethod(game, "__newindex", newcclosure(function(self, key, value)
             if not checkcaller() then
-                if env_global.NoRecoil and (key == "Recoil" or key == "RecoilControl" or key == "VisualRecoil") then
+                if env_global.NoRecoilEnabled and (key == "Recoil" or key == "RecoilControl" or key == "VisualRecoil") then
                     return oldNewIndex(self, key, 0)
                 end
-                if env_global.NoSpread and (key == "Spread" or key == "Accuracy" or key == "Inaccuracy") then
+                if env_global.NoSpreadEnabled and (key == "Spread" or key == "Accuracy" or key == "Inaccuracy") then
+                    return oldNewIndex(self, key, 0)
+                end
+
+                -- 子彈修改 (寫入攔截)
+                if env_global.InfiniteAmmoEnabled and (key == "Ammo" or key == "CurrentAmmo" or key == "Clip" or key == "Mag") then
+                    return oldNewIndex(self, key, 999)
+                end
+                if env_global.RapidFireEnabled and (key == "FireRate" or key == "Cooldown" or key == "Delay") then
+                    return oldNewIndex(self, key, 0)
+                end
+                if env_global.InstaReloadEnabled and (key == "ReloadTime" or key == "ReloadSpeed") then
                     return oldNewIndex(self, key, 0)
                 end
             end
@@ -457,7 +671,7 @@ function Combat.Init(Core)
         end))
         
         print("[Halol] 強化 Combat Hooks 已啟動")
-    end
+    end -- 閉合 SetupSilentAim
 
     -- 啟動所有循環與 Hook
     SetupSilentAim()
@@ -471,30 +685,66 @@ function Combat.Init(Core)
         if target then
             lastTarget = target
             local targetPos = target.Position
-            local root = target.Parent:FindFirstChild("HumanoidRootPart")
+            local char = target.Parent
+            local root = char and char:FindFirstChild("HumanoidRootPart")
             
             -- 強化預測與重力補償
-            if env_global.AimbotPrediction and root then
+            if (env_global.AimbotPrediction or env_global.AimbotRageMode) and root then
                 local dist = (Camera.CFrame.Position - targetPos).Magnitude
-                local timeToHit = dist / env_global.AimbotBulletSpeed
+                local bulletSpeed = env_global.AimbotBulletSpeed
                 
-                -- 基礎預測 (速度 * 時間)
-                targetPos = targetPos + (root.Velocity * timeToHit)
+                -- 如果是暴力模式，自動提升預測精度
+                local timeToHit = dist / bulletSpeed
+                
+                -- 延遲補償 (Ping Compensation)
+                if env_global.AimbotPingCompensation then
+                    local ping = tonumber(lp:GetNetworkPing()) or 0.05
+                    timeToHit = timeToHit + ping
+                end
+                
+                -- 進階預測 (位置 + 速度*時間 + 0.5*加速度*時間^2)
+                local velocity = root.Velocity
+                local predictionOffset = velocity * timeToHit
+                
+                -- 簡單的加速度估算 (如果目標在跳躍或快速轉向)
+                if velocity.Magnitude > 1 then
+                    predictionOffset = predictionOffset + (velocity.Unit * 0.5 * timeToHit * timeToHit)
+                end
+                
+                targetPos = targetPos + predictionOffset
                 
                 -- 重力補償 (0.5 * g * t^2)
-                local gravityCompensation = 0.5 * env_global.AimbotGravity * (timeToHit ^ 2)
+                local gravity = env_global.AimbotGravity
+                local gravityCompensation = 0.5 * gravity * (timeToHit ^ 2)
                 targetPos = targetPos + Vector3.new(0, gravityCompensation, 0)
             end
             
             local currentCF = Camera.CFrame
             local targetCF = CFrame.new(currentCF.Position, targetPos)
             
-            -- 平滑度處理 (優化曲線)
-            if env_global.AimbotSmoothness > 0 then
-                local alpha = 1 / (env_global.AimbotSmoothness * 100)
+            -- 平滑度處理
+            if env_global.AimbotRageMode then
+                -- 暴力模式：瞬間鎖定，無視平滑度
+                Camera.CFrame = targetCF
+            elseif env_global.AimbotSmoothness > 0 then
+                local smoothness = math.max(0.01, env_global.AimbotSmoothness)
+                local alpha = 1 / (smoothness * 100)
                 Camera.CFrame = currentCF:Lerp(targetCF, alpha)
             else
                 Camera.CFrame = targetCF
+            end
+
+            -- 自動射擊邏輯
+            if env_global.AutoShoot then
+                local weapon = GetCurrentWeapon()
+                if weapon then
+                    local remote = weapon:FindFirstChild("RemoteEvent") or weapon:FindFirstChildOfClass("RemoteEvent") or weapon:FindFirstChild("Fire")
+                    if remote then
+                        -- 如果是魔法子彈，直接打頭，否則打當前瞄準點
+                        local shotPos = env_global.MagicBullet and target.Position or targetPos
+                        remote:FireServer(shotPos)
+                    end
+                end
             end
         else
             lastTarget = nil
@@ -564,36 +814,6 @@ function Combat.Init(Core)
         end
     end)
 
-    Core.RegisterFeature("KillAll", {
-        Name = "全圖殺敵 (Kill All)",
-        Category = "Rage",
-        Callback = function(state) env_global.KillAll = state end
-    })
-
-    Core.RegisterFeature("BulletTeleport", {
-        Name = "子彈傳送 (Bullet Teleport)",
-        Category = "Rage",
-        Callback = function(state) env_global.BulletTeleport = state end
-    })
-
-    Core.RegisterFeature("BulletMultiTarget", {
-        Name = "多目標傳送 (Multi-Target)",
-        Category = "Rage",
-        Callback = function(state) env_global.BulletMultiTarget = state end
-    })
-
-    Core.RegisterFeature("BulletCritical", {
-        Name = "子彈爆擊 (Bullet Critical)",
-        Category = "Rage",
-        Callback = function(state) env_global.BulletCritical = state end
-    })
-
-    Core.RegisterFeature("MagicBullet", {
-        Name = "魔法子彈 (Magic Bullet)",
-        Category = "Rage",
-        Callback = function(state) env_global.MagicBullet = state end
-    })
-
     -- [[ 全圖殺敵核心邏輯 ]]
     task.spawn(function()
         while task.wait() do
@@ -611,12 +831,13 @@ function Combat.Init(Core)
                                 -- 我們透過 Hook Namecall 已經實現了自動重定向子彈
                                 pcall(function()
                                     -- 如果有自動射擊 API 則調用
-                                    if weapon:FindFirstChild("RemoteEvent") then
-                                        weapon.RemoteEvent:FireServer(player.Character.Head.Position)
+                                    local remote = weapon:FindFirstChild("RemoteEvent") or weapon:FindFirstChildOfClass("RemoteEvent")
+                                    if remote then
+                                        remote:FireServer(player.Character.Head.Position)
                                     end
                                 end)
                                 task.wait(env_global.KillAllDelay)
-                            	end
+                            end
                         end
                     end
                     if not env_global.KillAll then break end

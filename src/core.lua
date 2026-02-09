@@ -245,7 +245,7 @@ function Core.CreateGUI()
     tabLayout.Parent = TabContainer
     tabLayout.Padding = UDim.new(0, 2)
 
-    for _, cat in ipairs({"All", "Combat", "Visuals", "Misc", "Protection"}) do
+    for _, cat in ipairs({"All", "Rage", "Combat", "Visuals", "Misc", "Protection"}) do
         local btn = Instance.new("TextButton")
         btn.Name = cat .. "Tab"
         btn.Parent = TabContainer
@@ -262,8 +262,14 @@ function Core.CreateGUI()
         end)
     end
 
+    -- 自動更新 CanvasSize
+    UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        FeatureList.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y + 10)
+    end)
+
     -- 新增功能按鈕的函數
     Core.UI = {}
+    
     function Core.UI.AddFeature(id, info)
         local frame = Instance.new("Frame")
         local label = Instance.new("TextLabel")
@@ -304,6 +310,134 @@ function Core.CreateGUI()
         FeatureList.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y)
     end
 
+    function Core.UI.AddSlider(id, info)
+        local frame = Instance.new("Frame")
+        local label = Instance.new("TextLabel")
+        local sliderBG = Instance.new("Frame")
+        local sliderBar = Instance.new("Frame")
+        local valueLabel = Instance.new("TextLabel")
+
+        local min = info.Min or 0
+        local max = info.Max or 100
+        local default = info.Default or min
+        local current = default
+
+        frame.Name = id .. "Slider"
+        frame.Parent = FeatureList
+        frame.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+        frame.Size = UDim2.new(1, -5, 0, 45)
+        frame.BorderSizePixel = 0
+        frame:SetAttribute("Category", info.Category)
+
+        label.Parent = frame
+        label.Size = UDim2.new(1, -10, 0, 20)
+        label.Position = UDim2.new(0, 10, 0, 5)
+        label.BackgroundTransparency = 1
+        label.Text = info.Name
+        label.TextColor3 = Color3.fromRGB(255, 255, 255)
+        label.TextSize = 11
+        label.Font = Enum.Font.Gotham
+        label.TextXAlignment = Enum.TextXAlignment.Left
+
+        sliderBG.Parent = frame
+        sliderBG.BackgroundColor3 = Color3.fromRGB(60, 60, 65)
+        sliderBG.BorderSizePixel = 0
+        sliderBG.Position = UDim2.new(0, 10, 0, 30)
+        sliderBG.Size = UDim2.new(1, -60, 0, 6)
+
+        sliderBar.Parent = sliderBG
+        sliderBar.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+        sliderBar.BorderSizePixel = 0
+        sliderBar.Size = UDim2.new((current - min) / (max - min), 0, 1, 0)
+
+        valueLabel.Parent = frame
+        valueLabel.Size = UDim2.new(0, 40, 0, 20)
+        valueLabel.Position = UDim2.new(1, -45, 0, 23)
+        valueLabel.BackgroundTransparency = 1
+        valueLabel.Text = tostring(current)
+        valueLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+        valueLabel.TextSize = 10
+        valueLabel.Font = Enum.Font.Code
+
+        local function update(input)
+            local pos = math.clamp((input.Position.X - sliderBG.AbsolutePosition.X) / sliderBG.AbsoluteSize.X, 0, 1)
+            sliderBar.Size = UDim2.new(pos, 0, 1, 0)
+            current = math.floor(min + (max - min) * pos)
+            valueLabel.Text = tostring(current)
+            if info.Callback then info.Callback(current) end
+        end
+
+        local dragging = false
+        sliderBG.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = true
+                update(input)
+            end
+        end)
+
+        Core.UserInputService.InputChanged:Connect(function(input)
+            if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                update(input)
+            end
+        end)
+
+        Core.UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = false
+            end
+        end)
+
+        FeatureList.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y)
+    end
+
+    function Core.UI.AddKeybind(id, info)
+        local frame = Instance.new("Frame")
+        local label = Instance.new("TextLabel")
+        local bindBtn = Instance.new("TextButton")
+
+        frame.Name = id .. "Bind"
+        frame.Parent = FeatureList
+        frame.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+        frame.Size = UDim2.new(1, -5, 0, 35)
+        frame.BorderSizePixel = 0
+        frame:SetAttribute("Category", info.Category)
+
+        label.Parent = frame
+        label.Size = UDim2.new(1, -80, 1, 0)
+        label.Position = UDim2.new(0, 10, 0, 0)
+        label.BackgroundTransparency = 1
+        label.Text = info.Name
+        label.TextColor3 = Color3.fromRGB(255, 255, 255)
+        label.TextSize = 12
+        label.Font = Enum.Font.Gotham
+        label.TextXAlignment = Enum.TextXAlignment.Left
+
+        bindBtn.Parent = frame
+        bindBtn.Size = UDim2.new(0, 70, 0, 25)
+        bindBtn.Position = UDim2.new(1, -75, 0, 5)
+        bindBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+        bindBtn.Text = info.Default and info.Default.Name or "NONE"
+        bindBtn.TextColor3 = Color3.new(1, 1, 1)
+        bindBtn.Font = Enum.Font.GothamBold
+        bindBtn.TextSize = 10
+
+        local listening = false
+        bindBtn.MouseButton1Click:Connect(function()
+            listening = true
+            bindBtn.Text = "..."
+        end)
+
+        Core.UserInputService.InputBegan:Connect(function(input)
+            if listening and input.UserInputType == Enum.UserInputType.Keyboard then
+                listening = false
+                bindBtn.Text = input.KeyCode.Name
+                if info.Callback then info.Callback(input.KeyCode) end
+            end
+        end)
+
+        FeatureList.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y)
+    end
+
     -- 初始化現有功能
     for id, info in pairs(Core.Features) do
         Core.UI.AddFeature(id, info)
@@ -312,6 +446,26 @@ function Core.CreateGUI()
     -- 自動開啟選單 (防止隱藏)
     MainFrame.Visible = true
     ScreenGui.Enabled = true
+
+    -- [[ 滑鼠解鎖邏輯 ]]
+    local function ToggleMouse(visible)
+        Core.UserInputService.MouseIconEnabled = visible
+        if visible then
+            -- 解鎖滑鼠位置
+            Core.UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+        else
+            -- 回歸遊戲控制
+            Core.UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+        end
+    end
+
+    -- 初始化時解鎖
+    ToggleMouse(true)
+
+    -- 監聽可見性變化
+    MainFrame:GetPropertyChangedSignal("Visible"):Connect(function()
+        ToggleMouse(MainFrame.Visible)
+    end)
 
     -- [[ 快捷鍵監聽 (INS) ]]
     Core.UserInputService.InputBegan:Connect(function(input, gameProcessed)
