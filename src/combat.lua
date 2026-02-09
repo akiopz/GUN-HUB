@@ -83,6 +83,7 @@ function Combat.Init(Core)
     env_global.RapidFireEnabled = env_global.RapidFireEnabled or false
     env_global.InstaReloadEnabled = env_global.InstaReloadEnabled or false
     env_global.AimbotNPCs = env_global.AimbotNPCs or false
+    env_global.TeamCheck = env_global.TeamCheck or true
 
     -- [[ 註冊功能 ]]
     Core.RegisterFeature("TeleportKill", {
@@ -218,6 +219,15 @@ function Combat.Init(Core)
         end
     })
 
+    Core.RegisterFeature("TeamCheck", {
+        Name = "隊友檢查 (Team Check)",
+        Description = "開啟後自動瞄準將不會鎖定同隊玩家",
+        Category = "Combat",
+        Callback = function(state)
+            env_global.TeamCheck = state
+        end
+    })
+
     Core.RegisterFeature("AimbotRage", {
         Name = "超強鎖頭 (Rage Lock)",
         Description = "瞬間鎖定、無視平滑度、進階預測",
@@ -342,7 +352,8 @@ function Combat.Init(Core)
         for _, player in ipairs(Players:GetPlayers()) do
             if player ~= lp then
                 local isTeam = (player.Team == lp.Team and player.Team ~= nil)
-                if not isTeam then
+                -- 只有在關閉隊友檢查或是對方不是隊友時才繼續
+                if not env_global.TeamCheck or not isTeam then
                     local char = player.Character
                     if char then
                         local humanoid = char:FindFirstChildOfClass("Humanoid")
