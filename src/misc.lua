@@ -31,8 +31,38 @@ function Misc.Init(Core)
     env_global.DesyncAmount = env_global.DesyncAmount or 5
     env_global.Spider = env_global.Spider or false
     env_global.Bhop = env_global.Bhop or false
+    env_global.KillEffect = env_global.KillEffect or false
+    env_global.KillSound = env_global.KillSound or false
+    env_global.AntiAFK = env_global.AntiAFK or false
 
     -- [[ 註冊功能 ]]
+    Core.RegisterFeature("AntiAFK", {
+        Name = "防掛機 (Anti-AFK)",
+        Category = "Misc",
+        Callback = function(state)
+            env_global.AntiAFK = state
+            if state then
+                lp.Idled:Connect(function()
+                    game:GetService("VirtualUser"):CaptureController()
+                    game:GetService("VirtualUser"):ClickButton2(Vector2.new())
+                end)
+            end
+        end
+    })
+
+    Core.RegisterFeature("KillEffect", {
+        Name = "擊殺特效 (Kill Effect)",
+        Description = "擊殺敵人後在目標位置產生爆炸特效",
+        Category = "Misc",
+        Callback = function(state) env_global.KillEffect = state end
+    })
+
+    Core.RegisterFeature("KillSound", {
+        Name = "擊殺音效 (Kill Sound)",
+        Description = "擊殺敵人後播放經典擊殺音效",
+        Category = "Misc",
+        Callback = function(state) env_global.KillSound = state end
+    })
     Core.RegisterFeature("WalkSpeedEnabled", {
         Name = "速度加強 (Speed)",
         Category = "Misc",
@@ -294,6 +324,82 @@ function Misc.Init(Core)
         if env_global.InfJump and lp.Character and lp.Character:FindFirstChildOfClass("Humanoid") then
             lp.Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping")
         end
+    end)
+
+    -- [[ 擊殺偵測與效果 ]]
+    local function PlayKillEffect(pos)
+        if env_global.KillEffect then
+            local p = Instance.new("Explosion")
+            p.Position = pos
+            p.BlastRadius = 0
+            p.BlastPressure = 0
+            p.Parent = workspace
+            
+            local part = Instance.new("Part")
+            part.Position = pos
+            part.Anchored = true
+            part.CanCollide = false
+            part.Transparency = 1
+            part.Parent = workspace
+            
+            local attachment = Instance.new("Attachment", part)
+            local particles = Instance.new("ParticleEmitter", attachment)
+            particles.Rate = 100
+            particles.Speed = NumberRange.new(5, 10)
+            particles.Lifetime = NumberRange.new(0.5, 1)
+            particles.Size = NumberSequence.new(0.5, 0)
+            particles.Color = ColorSequence.new(Color3.fromRGB(255, 0, 0), Color3.fromRGB(255, 255, 0))
+            
+            task.wait(1)
+            part:Destroy()
+        end
+    end
+
+    local function PlayKillSound()
+        if env_global.KillSound then
+            local sound = Instance.new("Sound")
+            sound.SoundId = "rbxassetid://6831303433" -- 擊殺音效 ID
+            sound.Volume = 2
+            sound.Parent = game:GetService("SoundService")
+            sound:Play()
+            sound.Ended:Connect(function() sound:Destroy() end)
+        end
+    end
+
+    local function OnPlayerDied(player)
+        if player == lp then return end
+        
+        -- 檢查是否是由本地玩家擊殺 (簡單判定：如果距離近且死掉)
+        -- 更準確的方式需要 Hook 傷害 Remote，這裡採用通用判定
+        local char = player.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local dist = (hrp.Position - Camera.CFrame.Position).Magnitude
+            if dist < 500 then -- 在一定範圍內死掉就觸發特效 (作為簡單判定)
+                PlayKillEffect(hrp.Position)
+                PlayKillSound()
+            end
+        end
+    end
+
+    for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
+        if p ~= lp then
+            p.CharacterAdded:Connect(function(char)
+                local hum = char:WaitForChild("Humanoid", 5)
+                if hum then
+                    hum.Died:Connect(function() OnPlayerDied(p) end)
+                end
+            end)
+        end
+    end
+
+    game:GetService("Players").PlayerAdded:Connect(function(p)
+        p.CharacterAdded:Connect(function(char)
+            local hum = char:WaitForChild("Humanoid", 5)
+            if hum then
+                hum.Died:Connect(function() OnPlayerDied(p) end)
+            end
+        end)
     end)
 
     print("[Halol] 強化移動模組已啟動")

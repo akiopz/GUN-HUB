@@ -56,229 +56,128 @@ function Protection.Init(Core)
         -- 2. 屬性與環境偽造 (Property & Environment Spoofing)
         local oldIndex
         oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
-            local success, result = pcall(function()
-                if not checkcaller() then
-                    -- 隱藏外掛物件
-                    if key == "Clonable" or key == "Archivable" then
-                        return false
-                    end
-                    -- 強化：防止檢測腳本獲取特定服務
-                    if self == game and (key == "LogService" or key == "ScriptContext") then
+            if not checkcaller() then
+                -- 隱藏外掛物件與屬性
+                if key == "Clonable" or key == "Archivable" then
+                    return false
+                end
+                
+                -- 防止遊戲腳本檢測特定的敏感服務
+                if self == game then
+                    local sensitiveServices = {
+                        ["LogService"] = true,
+                        ["ScriptContext"] = true,
+                        ["HttpService"] = true, -- 防止遊戲檢測外掛發出的 Http 請求
+                        ["Stats"] = true,
+                        ["VirtualUser"] = true
+                    }
+                    if sensitiveServices[key] then
                         return nil
                     end
+                end
 
-                    -- 偽造 Humanoid 屬性 (防止本地腳本檢測 WalkSpeed/JumpPower 修改)
-                    if self:IsA("Humanoid") then
-                        if key == "WalkSpeed" then return 16 end
-                        if key == "JumpPower" then return 50 end
-                        if key == "Health" then return self.Health end 
-                    end
+                -- 偽造 Humanoid 屬性 (防止本地腳本檢測 WalkSpeed/JumpPower 修改)
+                if self:IsA("Humanoid") then
+                    if key == "WalkSpeed" then return 16 end
+                    if key == "JumpPower" then return 50 end
+                    if key == "JumpHeight" then return 7.2 end
+                end
 
-                    -- 偽造環境屬性
-                    if self:IsA("Camera") and key == "FieldOfView" then
-                        return 70 -- 即使開啟 FOV Changer，腳本讀取到的也是 70
-                    end
-                    if self == workspace and key == "Gravity" then
-                        return 196.2 -- 即使修改重力，腳本讀取到的也是預設值
-                    end
-                    
-                    -- 強化：偽造光照與零件屬性
-                    if self:IsA("Lighting") then
-                        if key == "ClockTime" then return 12 end
-                        if key == "Brightness" then return 2 end
-                    end
-                    if self:IsA("BasePart") then
-                        if key == "CanCollide" then return true end
-                        if key == "Transparency" then return 0 end
-                    end
-
-                    -- 偽造時間戳 (Time Spoofing - 防止速度檢查)
-                    if key == "DistributedGameTime" or key == "DistributedTime" then
-                        return oldIndex(self, key) 
+                -- 偽造環境屬性
+                if self:IsA("Camera") and key == "FieldOfView" then
+                    return 70
+                end
+                if self == workspace and key == "Gravity" then
+                    return 196.2
+                end
+                
+                -- 隱藏 UI 物件
+                if (key == "Parent" or key == "Name") and self:IsA("GuiObject") then
+                    local source = debug.info(2, "s")
+                    if not source:find("halol") then
+                        -- 如果是遊戲腳本在查詢 UI，且該 UI 是我們創建的，則隱藏它
+                        -- 這裡需要配合 UI 創建時的命名規則
                     end
                 end
-                return oldIndex(self, key)
-            end)
-            if success then return result else return oldIndex(self, key) end
+            end
+            return oldIndex(self, key)
         end))
 
-        -- 2.5 屬性修改攔截 (Property Modification Spoofing)
-        local oldNewIndex
-        oldNewIndex = hookmetamethod(game, "__newindex", newcclosure(function(self, key, value)
-            local success = pcall(function()
-                if not checkcaller() then
-                    if self:IsA("Humanoid") then
-                        -- 無敵模式：鎖定生命值 (本地偽造)
-                        if env_global.GodModeEnabled and key == "Health" then
-                            oldNewIndex(self, key, self.MaxHealth)
-                            return true
-                        end
-                        -- 無減速攔截
-                        if env_global.NoSlow and key == "WalkSpeed" then
-                            local targetSpeed = env_global.WalkSpeedEnabled and env_global.WalkSpeed or 16
-                            if value < targetSpeed then
-                                oldNewIndex(self, key, targetSpeed)
-                                return true
-                            end
-                        end
-                        -- 跳躍攔截
-                        if env_global.JumpPowerEnabled and key == "JumpPower" then
-                            if value < env_global.JumpPower then
-                                oldNewIndex(self, key, env_global.JumpPower)
-                                return true
-                            end
-                        end
-                    end
-                end
-                return false
-            end)
-            
-            if success then return end
-            return oldNewIndex(self, key, value)
-        end))
-
-        -- 2.6 強化 Namecall 攔截 (Advanced Namecall Bypass)
+        -- 3. 方法攔截 (Method Spoofing)
         local oldNamecall
         oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
             local method = getnamecallmethod()
             local args = {...}
-            local name = self.Name:lower()
+            
+            if not checkcaller() then
+                -- 攔截 Kick
+                if method == "Kick" or method == "kick" then
+                    print("[Halol Protection] 攔截到 Kick 請求: " .. tostring(args[1]))
+                    return nil
+                end
 
-            local success, result = pcall(function()
-                if not checkcaller() then
-                    -- 0. 針對常見 Anti-Cheat 框架 (Adonnis 等) 的通用繞過
-                    if method == "GetDebugId" or method == "GetFullName" then
-                        local fullName = oldNamecall(self, "GetFullName")
-                        if fullName:find("Halol") or fullName:find("ScreenGui") then
-                            return true, "GameWorkspace"
+                -- 攔截檢測性 Remote
+                if method == "FireServer" or method == "InvokeServer" then
+                    local name = tostring(self.Name):lower()
+                    local detectionKeywords = {"check", "detect", "anticheat", "verify", "log", "report", "teleport"}
+                    for _, kw in ipairs(detectionKeywords) do
+                        if name:find(kw) then
+                            print("[Halol Protection] 攔截到可疑 Remote: " .. name)
+                            return nil
                         end
-                    end
-
-                    -- 1. 攔截 Kick (防止被遊戲腳本踢出)
-                    if method == "Kick" or method == "kick" then
-                        warn("[Halol Anti-Kick] 攔截到 Kick 請求: " .. tostring(args[1]))
-                        return true, nil
-                    end
-
-                    -- 2. 攔截檢測性遠程封包 (Security Remotes)
-                    if method == "FireServer" or method == "InvokeServer" then
-                        if name:find("check") or name:find("detect") or name:find("verify") or 
-                           name:find("security") or name:find("kick") or name:find("ban") or 
-                           name:find("teleport") or name:find("speed") or name:find("fly") or
-                           name:find("report") then
-                            return true, nil -- 直接吞掉檢測封包
-                        end
-                    end
-
-                    -- 3. 無敵模式：攔截傷害封包
-                    if env_global.GodModeEnabled then
-                        if method == "FireServer" or method == "InvokeServer" then
-                            if name:find("damage") or name:find("takehealth") or name:find("hit") or 
-                               name:find("ouch") or name:find("die") then
-                                return true, nil
-                            end
-                        end
-                    end
-
-                    -- 3.5 強化：攔截遠端函數調用，防止被 Anti-Cheat 主動掃描
-                    if method == "FireServer" or method == "InvokeServer" then
-                        -- 如果發送的是字串且包含本腳本特徵
-                        for _, arg in ipairs(args) do
-                            if type(arg) == "string" and (arg:find("Halol") or arg:find("combat") or arg:find("visuals")) then
-                                return true, nil
-                            end
-                        end
-                    end
-
-                    -- 4. 隱藏外掛 Instance (攔截 GetChildren / GetDescendants)
-                    if method == "GetChildren" or method == "GetDescendants" or method == "getchildren" or method == "getdescendants" then
-                        local list = oldNamecall(self, unpack(args))
-                        local newList = {}
-                        for i, v in ipairs(list) do
-                            local vName = v.Name:lower()
-                            if not (vName:find("halol") or vName:find("gui") or vName == "screen") then
-                                table.insert(newList, v)
-                            end
-                        end
-                        return true, newList
                     end
                 end
-                return false, nil
-            end)
-
-            if success and result ~= nil then return result end
+                
+                -- 攔截 GetService 獲取敏感服務
+                if method == "GetService" or method == "getService" then
+                    local serviceName = args[1]
+                    local sensitiveServices = {
+                        ["LogService"] = true,
+                        ["ScriptContext"] = true,
+                        ["VirtualUser"] = true
+                    }
+                    if sensitiveServices[serviceName] then
+                        return nil
+                    end
+                end
+            end
             return oldNamecall(self, ...)
         end))
 
-        -- 3. 全域變數偽裝 (Global Variable Spoofing)
-        local blockedGlobals = {
-            "syn", "getgenv", "getrawmetatable", "hookmetamethod", 
-            "Drawing", "identifyexecutor", "hookfunction", "newcclosure",
-            "getrenv", "getreg", "getgc", "setfpscap"
-        }
-        
-        local oldGenIndex
-        oldGenIndex = hookmetamethod(getgenv(), "__index", newcclosure(function(self, key)
-            if not checkcaller() and table.find(blockedGlobals, key) then
-                return nil -- 遊戲腳本讀取不到外掛 API
+        -- 4. 調試資訊偽裝 (Debug Info Spoofing)
+        local oldDebugInfo
+        oldDebugInfo = hookfunction(debug.info, newcclosure(function(f, ...)
+            if not checkcaller() and type(f) == "function" then
+                if IsOurFunction(f) then
+                    return "Roblox", "1.0", "global" -- 偽裝成官方腳本
+                end
             end
-            return oldGenIndex(self, key)
+            return oldDebugInfo(f, ...)
         end))
 
-        -- 4. 函數行為偽裝 (Function Behavior Spoofing)
-        if hookfunction then
-            -- 偽裝 tick() 避免頻率檢查
-            local oldTick = tick
-            hookfunction(tick, newcclosure(function()
+        -- 5. GC 偽裝 (Garbage Collector Spoofing - 如果執行器支援)
+        if env_global.getgc then
+            local oldGetgc
+            oldGetgc = hookfunction(env_global.getgc, newcclosure(function(...)
+                local gc = oldGetgc(...)
                 if not checkcaller() then
-                    return oldTick()
-                end
-                return oldTick()
-            end))
-
-            -- 5. 堆棧追蹤偽裝 (Stack Trace Spoofing)
-            local oldTraceback = debug.traceback
-            hookfunction(debug.traceback, newcclosure(function(...)
-                local trace = oldTraceback(...)
-                if not checkcaller() and type(trace) == "string" then
-                    -- 移除所有包含外掛關鍵字的堆棧行
-                    local lines = trace:split("\n")
-                    local newLines = {}
-                    for _, line in ipairs(lines) do
-                        if not (line:lower():find("halol") or line:lower():find("combat") or line:lower():find("visuals")) then
-                            table.insert(newLines, line)
+                    local newGc = {}
+                    for _, v in ipairs(gc) do
+                        if type(v) == "function" then
+                            if not IsOurFunction(v) then
+                                table.insert(newGc, v)
+                            end
+                        else
+                            table.insert(newGc, v)
                         end
                     end
-                    return table.concat(newLines, "\n")
+                    return newGc
                 end
-                return trace
+                return gc
             end))
-
-            -- 6. debug.info / debug.getinfo 偽裝 (隱藏腳本來源)
-            local oldDebugInfo = debug.info
-            hookfunction(debug.info, newcclosure(function(f, ...)
-                if not checkcaller() and type(f) == "function" then
-                    -- 如果檢測腳本試圖讀取我們的函數信息
-                    if IsOurFunction(f) then
-                        return "SystemScript", 0, "Native", "C" -- 偽造成系統內置 C 函數
-                    end
-                end
-                return oldDebugInfo(f, ...)
-            end))
-
-            -- 7. 針對 getfenv 的偽裝 (防止檢測腳本讀取我們的環境變數)
-            if env_global.getfenv then
-                local oldGetFenv = env_global.getfenv
-                hookfunction(env_global.getfenv, newcclosure(function(f)
-                    if not checkcaller() and type(f) == "function" and IsOurFunction(f) then
-                        return oldGetFenv(0) -- 回傳全局環境而非我們的私有環境
-                    end
-                    return oldGetFenv(f)
-                end))
-            end
         end
-        
-        print("[Halol] 全方位偽造系統 (Advanced Spoofing) 已啟動")
+
+        print("[Halol Protection] 超強反偵測系統已啟動")
     end
 
     SecureEnvironment()

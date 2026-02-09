@@ -228,7 +228,7 @@ function Visuals.Init(Core)
         
         for player, objects in pairs(ESP_Objects) do
             local char = player.Character
-            local isTeammate = (player.Team == lp.Team and player.Team ~= nil)
+            local isTeammate = Core.IsTeammate(player)
             local visible = false
             
             local shouldShow = false

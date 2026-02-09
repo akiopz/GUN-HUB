@@ -5,7 +5,7 @@
 -- [[ 啟動最前端：立即回饋 ]]
 print("========================================")
 print("[Halol] 偵測到執行指令，正在初始化...")
-local CURRENT_VERSION = "1.0.2"
+local CURRENT_VERSION = "1.0.3"
 
 pcall(function()
     game:GetService("StarterGui"):SetCore("SendNotification", {
@@ -48,7 +48,7 @@ end
 
 -- [[ 更新檢查機制 ]]
 local function CheckForUpdates()
-    local baseUrl = "https://raw.githubusercontent.com/akiopz/GUN-HUB/main/"
+    local baseUrl = "https://raw.githubusercontent.com/akiopz/-ez/main/%E5%B0%84%E6%93%8A%E9%A1%9E/"
     local ok, onlineVersion = pcall(game.HttpGet, game, baseUrl .. "version.txt")
     
     if ok and onlineVersion and not onlineVersion:find("404") then
@@ -71,7 +71,7 @@ local function LoadModule(path)
     if ModuleCache[path] then return ModuleCache[path] end
     
     local content
-    local baseUrl = "https://raw.githubusercontent.com/akiopz/GUN-HUB/main/"
+    local baseUrl = "https://raw.githubusercontent.com/akiopz/-ez/main/%E5%B0%84%E6%93%8A%E9%A1%9E/"
     
     -- 1. 智能路徑偵測 (僅在非強制更新時)
     if not FORCE_UPDATE then
@@ -98,7 +98,8 @@ local function LoadModule(path)
         print(logMsg .. path)
         
         local ok, res = pcall(game.HttpGet, game, baseUrl .. path)
-        if ok and res and #res > 0 then
+        -- 增加 404 檢查
+        if ok and res and #res > 0 and not res:find("404") then
             print("[Halol] 從 GitHub 成功加載: " .. path)
             content = res
             if writefile then 
@@ -109,7 +110,8 @@ local function LoadModule(path)
                 end)
             end
         else
-            warn("[Halol Error] 無法從任何來源加載模組: " .. path)
+            local errorType = (not ok or not res or #res == 0) and "連線失敗" or "檔案不存在 (404)"
+            warn("[Halol Error] 無法從 GitHub 加載模組 (" .. errorType .. "): " .. path)
         end
     end
     
@@ -156,8 +158,8 @@ local function Main()
     
     -- 針對各類執行器預設最穩配置
     if not env_global.ManualConfig then
-        env_global.DisableAggressiveProtection = true
-        env_global.DisableAdvancedHooks = true
+        env_global.DisableAggressiveProtection = false -- 啟用強化保護
+        env_global.DisableAdvancedHooks = false        -- 啟用高級 Hook
     end
 
     -- 並行加載模組群
@@ -175,6 +177,7 @@ local function Main()
         {"Protection", "src/protection.lua"},
         {"Combat", "src/combat.lua"},
         {"Visuals", "src/visuals.lua"},
+        {"World", "src/world.lua"},
         {"Misc", "src/misc.lua"}
     }
     

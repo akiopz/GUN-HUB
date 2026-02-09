@@ -9,12 +9,17 @@ local getgenv = (getgenv or function() return _G end)
 local env_global = getgenv() --[[@as GlobalEnv]]
 
 -- [[ 基礎環境定義 ]]
+Core.game = game
+Core.workspace = workspace
+Core.tick = tick
 Core.load_func = (env_global.loadstring or env_global.load or loadstring or load)
 Core.hookmetamethod = env_global.hookmetamethod or (getgenv and getgenv().hookmetamethod)
 Core.newcclosure = env_global.newcclosure or (getgenv and getgenv().newcclosure) or function(f) return f end
 Core.checkcaller = env_global.checkcaller or (getgenv and getgenv().checkcaller) or function() return false end
 Core.getnamecallmethod = env_global.getnamecallmethod or (getgenv and getgenv().getnamecallmethod)
 Core.hookfunction = env_global.hookfunction or (getgenv and getgenv().hookfunction)
+Core.islclosure = env_global.islclosure or function(f) return type(f) == "function" end
+Core.cloneref = env_global.cloneref or function(s) return s end
 Core.Drawing = env_global.Drawing or (getgenv and getgenv().Drawing)
 Core.gethui = function()
     -- 針對 Solara 等執行器的優化：優先嘗試 PlayerGui
@@ -52,6 +57,43 @@ function Core.GetExecutorInfo()
         end
     end)
     return name, version
+end
+
+-- [[ 強化隊友檢查系統 ]]
+function Core.IsTeammate(player)
+    if not player or player == Core.LocalPlayer then return true end
+    
+    -- 1. 原生 Team 檢查
+    if player.Team == Core.LocalPlayer.Team and player.Team ~= nil then
+        return true
+    end
+    
+    -- 2. TeamColor 檢查 (部分遊戲 Team 物件可能被混淆或無效)
+    if player.TeamColor == Core.LocalPlayer.TeamColor and player.TeamColor ~= nil then
+        return true
+    end
+    
+    -- 3. 屬性檢查 (常見的 'Team' 屬性)
+    local success, teamAttr = pcall(function() return player:GetAttribute("Team") end)
+    if success and teamAttr ~= nil then
+        local lpTeamAttr = Core.LocalPlayer:GetAttribute("Team")
+        if teamAttr == lpTeamAttr then return true end
+    end
+    
+    -- 4. 角色父物件檢查 (某些遊戲將同隊玩家放在同一個 Folder)
+    if player.Character and player.Character.Parent then
+        local parent = player.Character.Parent
+        if parent.Name ~= "Workspace" and parent.Name ~= "Players" then
+            if Core.LocalPlayer.Character and Core.LocalPlayer.Character.Parent == parent then
+                return true
+            end
+        end
+    end
+
+    -- 5. 顯示名稱顏色檢查 (進階：部分遊戲透過 Leaderboard 顏色區分)
+    -- 這裡僅作預留，具體實作需視遊戲而定
+
+    return false
 end
 
 -- 服務獲取優化 (含 cloneref 支援)
@@ -148,7 +190,7 @@ end
 
 -- [[ 功能註冊系統 (為 UI 做準備) ]]
 Core.Features = {}
-Core.Categories = {"Rage", "Combat", "Visuals", "Misc", "Protection"}
+Core.Categories = {"Rage", "Combat", "Visuals", "World", "Misc", "Protection"}
 
 function Core.RegisterFeature(id, info)
     Core.Features[id] = {
@@ -316,6 +358,91 @@ function Core.CreateGUI()
                 toggle.Text = newState and "ON" or "OFF"
             else
                 warn("[Halol UI Error] Failed to toggle feature: " .. tostring(id))
+            end
+        end)
+
+        FeatureList.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y)
+    end
+
+    function Core.UI.AddDropdown(id, info)
+        local frame = Instance.new("Frame")
+        local label = Instance.new("TextLabel")
+        local dropBtn = Instance.new("TextButton")
+        local dropList = Instance.new("ScrollingFrame")
+        local listLayout = Instance.new("UIListLayout")
+
+        local options = info.Options or {}
+        local current = info.Default or options[1]
+        local isOpen = false
+
+        frame.Name = id .. "Dropdown"
+        frame.Parent = FeatureList
+        frame.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+        frame.Size = UDim2.new(1, -5, 0, 40)
+        frame.BorderSizePixel = 0
+        frame.ZIndex = 2
+        frame:SetAttribute("Category", info.Category)
+
+        label.Parent = frame
+        label.Size = UDim2.new(0.5, -10, 1, 0)
+        label.Position = UDim2.new(0, 10, 0, 0)
+        label.BackgroundTransparency = 1
+        label.Text = info.Name
+        label.TextColor3 = Color3.fromRGB(255, 255, 255)
+        label.TextSize = 11
+        label.Font = Enum.Font.Gotham
+        label.TextXAlignment = Enum.TextXAlignment.Left
+
+        dropBtn.Parent = frame
+        dropBtn.Size = UDim2.new(0.5, -10, 0.7, 0)
+        dropBtn.Position = UDim2.new(0.5, 5, 0.15, 0)
+        dropBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 65)
+        dropBtn.Text = current
+        dropBtn.TextColor3 = Color3.fromRGB(0, 150, 255)
+        dropBtn.TextSize = 10
+        dropBtn.Font = Enum.Font.GothamBold
+
+        dropList.Parent = frame
+        dropList.Size = UDim2.new(0.5, -10, 0, 0)
+        dropList.Position = UDim2.new(0.5, 5, 1, 0)
+        dropList.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+        dropList.BorderSizePixel = 0
+        dropList.Visible = false
+        dropList.ZIndex = 10
+        dropList.ScrollBarThickness = 2
+
+        listLayout.Parent = dropList
+        listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+        for i, opt in ipairs(options) do
+            local btn = Instance.new("TextButton")
+            btn.Parent = dropList
+            btn.Size = UDim2.new(1, 0, 0, 25)
+            btn.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+            btn.Text = opt
+            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            btn.TextSize = 10
+            btn.Font = Enum.Font.Gotham
+            btn.BorderSizePixel = 0
+            
+            btn.MouseButton1Click:Connect(function()
+                current = opt
+                dropBtn.Text = opt
+                isOpen = false
+                dropList.Visible = false
+                dropList.Size = UDim2.new(0.5, -10, 0, 0)
+                if info.Callback then info.Callback(opt) end
+            end)
+        end
+
+        dropBtn.MouseButton1Click:Connect(function()
+            isOpen = not isOpen
+            dropList.Visible = isOpen
+            if isOpen then
+                dropList.Size = UDim2.new(0.5, -10, 0, math.min(#options * 25, 100))
+                dropList.CanvasSize = UDim2.new(0, 0, 0, #options * 25)
+            else
+                dropList.Size = UDim2.new(0.5, -10, 0, 0)
             end
         end)
 

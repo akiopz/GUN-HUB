@@ -24,6 +24,9 @@ function Combat.Init(Core)
     env_global.BulletMultiTarget = env_global.BulletMultiTarget or false
     env_global.BulletCritical = env_global.BulletCritical or false
     env_global.MagicBullet = env_global.MagicBullet or false
+    env_global.MagicBulletPrediction = env_global.MagicBulletPrediction or false
+    env_global.MagicBulletWallbang = env_global.MagicBulletWallbang or true
+    env_global.MagicBulletHoming = env_global.MagicBulletHoming or false
     env_global.DamageMultiplierEnabled = env_global.DamageMultiplierEnabled or false
     env_global.DamageMultiplier = env_global.DamageMultiplier or 2
     
@@ -74,8 +77,9 @@ function Combat.Init(Core)
     env_global.HitboxSize = env_global.HitboxSize or 5
     env_global.SpinbotEnabled = env_global.SpinbotEnabled or false
     env_global.SpinbotSpeed = env_global.SpinbotSpeed or 50
+    env_global.SpinbotMode = env_global.SpinbotMode or "Normal" -- "Normal", "Jitter", "Vertical", "Chaos"
     env_global.AntiAimEnabled = env_global.AntiAimEnabled or false
-    env_global.AntiAimMode = env_global.AntiAimMode or "Jitter" -- "Jitter", "Spin", "Backwards"
+    env_global.AntiAimMode = env_global.AntiAimMode or "Jitter" -- "Jitter", "Spin", "Backwards", "Headless"
     env_global.TeleportKillEnabled = env_global.TeleportKillEnabled or false
     env_global.InstaKillEnabled = env_global.InstaKillEnabled or false
     env_global.ShieldEnabled = env_global.ShieldEnabled or false
@@ -105,17 +109,38 @@ function Combat.Init(Core)
     Core.RegisterFeature("Spinbot", {
         Name = "大陀螺 (Spinbot)",
         Category = "Rage",
-        Callback = function(state)
-            env_global.SpinbotEnabled = state
-        end
+        Callback = function(state) env_global.SpinbotEnabled = state end
+    })
+
+    Core.UI.AddDropdown("SpinbotMode", {
+        Name = "陀螺模式",
+        Category = "Rage",
+        Options = {"Normal", "Jitter", "Vertical", "Chaos"},
+        Default = "Normal",
+        Callback = function(v) env_global.SpinbotMode = v end
+    })
+
+    Core.UI.AddSlider("SpinbotSpeed", {
+        Name = "旋轉速度",
+        Category = "Rage",
+        Min = 10,
+        Max = 200,
+        Default = 50,
+        Callback = function(v) env_global.SpinbotSpeed = v end
     })
 
     Core.RegisterFeature("AntiAim", {
         Name = "反自瞄 (Anti-Aim)",
         Category = "Rage",
-        Callback = function(state)
-            env_global.AntiAimEnabled = state
-        end
+        Callback = function(state) env_global.AntiAimEnabled = state end
+    })
+
+    Core.UI.AddDropdown("AntiAimMode", {
+        Name = "反自瞄模式",
+        Category = "Rage",
+        Options = {"Jitter", "Spin", "Backwards", "Headless"},
+        Default = "Jitter",
+        Callback = function(v) env_global.AntiAimMode = v end
     })
 
     Core.RegisterFeature("SilentAim", {
@@ -191,6 +216,27 @@ function Combat.Init(Core)
         Description = "子彈自動追蹤、無視障礙物且無視距離限制",
         Category = "Rage",
         Callback = function(state) env_global.MagicBullet = state end
+    })
+
+    Core.RegisterFeature("MagicBulletPrediction", {
+        Name = "魔法預測 (Magic Prediction)",
+        Description = "為魔法子彈增加移動預測，提高命中率",
+        Category = "Rage",
+        Callback = function(state) env_global.MagicBulletPrediction = state end
+    })
+
+    Core.RegisterFeature("MagicBulletWallbang", {
+        Name = "魔法穿牆 (Magic Wallbang)",
+        Description = "魔法子彈是否直接無視所有障礙物",
+        Category = "Rage",
+        Callback = function(state) env_global.MagicBulletWallbang = state end
+    })
+
+    Core.RegisterFeature("MagicBulletHoming", {
+        Name = "彈道追蹤 (Bullet Homing)",
+        Description = "使實體子彈(Projectile)具備自動追蹤能力",
+        Category = "Rage",
+        Callback = function(state) env_global.MagicBulletHoming = state end
     })
 
     Core.RegisterFeature("HitboxExpander", {
@@ -351,13 +397,8 @@ function Combat.Init(Core)
         -- 1. 玩家掃描
         for _, player in ipairs(Players:GetPlayers()) do
             if player ~= lp then
-                -- 強化隊友檢查：同時檢查 Team 物件與 TeamColor (防止部分遊戲 Team 物件無效)
-                local isTeam = false
-                if player.Team == lp.Team and player.Team ~= nil then
-                    isTeam = true
-                elseif player.TeamColor == lp.TeamColor and player.TeamColor ~= nil then
-                    isTeam = true
-                end
+                -- 使用強化隊友檢查
+                local isTeam = Core.IsTeammate(player)
 
                 -- 只有在關閉隊友檢查或是對方不是隊友時才繼續
                 if not env_global.TeamCheck or not isTeam then
@@ -365,15 +406,7 @@ function Combat.Init(Core)
                     if char then
                         local humanoid = char:FindFirstChildOfClass("Humanoid")
                         if humanoid and humanoid.Health > 0 then
-                            -- [[ 額外隊友檢查：檢查名字標籤顏色或特定屬性 (針對無原生 Team 系統的遊戲) ]]
-                            local isActuallyTeammate = false
-                            -- 某些遊戲會把隊友放在特定的 Folder，或是名字標籤有特定顏色
-                            -- 這裡可以擴展更多的檢查邏輯
-                            
-                            if isActuallyTeammate then isTeam = true end
-                            
-                            if not env_global.TeamCheck or not isTeam then
-                                -- 多骨骼掃描邏輯
+                            -- 多骨骼掃描邏輯
                             local bones = {env_global.AimbotTargetPart, "UpperTorso", "HumanoidRootPart", "LowerTorso"}
                             local bestBone = nil
                             
@@ -500,14 +533,7 @@ function Combat.Init(Core)
         Callback = function(v) env_global.HitboxSize = v end
     })
 
-    Core.UI.AddSlider("SpinbotSpeed", {
-        Name = "大陀螺速度 (Spin)",
-        Category = "Rage",
-        Min = 1,
-        Max = 500,
-        Default = env_global.SpinbotSpeed,
-        Callback = function(v) env_global.SpinbotSpeed = v end
-    })
+
 
     Core.UI.AddSlider("KillAllDelay", {
         Name = "全圖殺敵間隔 (Delay)",
@@ -598,15 +624,31 @@ function Combat.Init(Core)
                             local origin = args[1]
                             local targetPos = target.Position
                             
+                            -- 強化預測
+                            if env_global.MagicBulletPrediction and target.Parent then
+                                local hum = target.Parent:FindFirstChildOfClass("Humanoid")
+                                local root = hum and hum.RootPart
+                                if root then
+                                    local dist = (origin - targetPos).Magnitude
+                                    local timeToHit = dist / (env_global.AimbotBulletSpeed or 1000)
+                                    targetPos = targetPos + (root.Velocity * timeToHit)
+                                end
+                            end
+
                             -- 魔法子彈 & 超遠射程優化
                             if env_global.MagicBullet then
                                 local params = RaycastParams.new()
-                                params.FilterType = Enum.RaycastFilterType.Include
-                                params.FilterDescendantsInstances = {target.Parent}
+                                if env_global.MagicBulletWallbang then
+                                    params.FilterType = Enum.RaycastFilterType.Include
+                                    params.FilterDescendantsInstances = {target.Parent}
+                                else
+                                    params.FilterType = Enum.RaycastFilterType.Exclude
+                                    params.FilterDescendantsInstances = {lp.Character, Camera}
+                                end
                                 args[3] = params
                             end
 
-                            local direction = (targetPos - origin).Unit * 15000 -- 極大化射程
+                            local direction = (targetPos - origin).Unit * 20000 -- 更大的射程
                             args[2] = direction
                             return oldNamecall(self, unpack(args))
                         end
@@ -614,7 +656,20 @@ function Combat.Init(Core)
                         local target = Combat.GetNearestEnemy()
                         if target and (env_global.MagicBullet or math.random(1, 100) <= env_global.SilentAimHitChance) then
                             local origin = args[1].Origin
-                            local direction = (target.Position - origin).Unit * 15000
+                            local targetPos = target.Position
+                            
+                            -- 強化預測
+                            if env_global.MagicBulletPrediction and target.Parent then
+                                local hum = target.Parent:FindFirstChildOfClass("Humanoid")
+                                local root = hum and hum.RootPart
+                                if root then
+                                    local dist = (origin - targetPos).Magnitude
+                                    local timeToHit = dist / (env_global.AimbotBulletSpeed or 1000)
+                                    targetPos = targetPos + (root.Velocity * timeToHit)
+                                end
+                            end
+
+                            local direction = (targetPos - origin).Unit * 20000
                             args[1] = Ray.new(origin, direction)
                             return oldNamecall(self, unpack(args))
                         end
@@ -783,8 +838,36 @@ function Combat.Init(Core)
             return oldNewIndex(self, key, value)
         end))
         
-        print("[Halol] 強化 Combat Hooks 已啟動")
-    end -- 閉合 SetupSilentAim
+        -- [[ 彈道追蹤 (Homing Projectiles) ]]
+    task.spawn(function()
+        while task.wait(0.1) do
+            if env_global.MagicBullet and env_global.MagicBulletHoming then
+                local target = Combat.GetNearestEnemy()
+                if target then
+                    -- 掃描 workspace 中的新子彈實體
+                    for _, obj in ipairs(workspace:GetChildren()) do
+                        if (obj:IsA("BasePart") or obj:IsA("Model")) and (obj.Name:lower():find("bullet") or obj.Name:lower():find("projectile") or obj.Name:lower():find("shot")) then
+                            -- 如果是子彈且距離玩家較近 (假設是自己射的)
+                            local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+                            if hrp and (obj:GetPivot().Position - hrp.Position).Magnitude < 50 then
+                                -- 轉向目標
+                                local targetPos = target.Position
+                                if obj:IsA("BasePart") then
+                                    obj.CFrame = CFrame.new(obj.Position, targetPos)
+                                    obj.Velocity = (targetPos - obj.Position).Unit * obj.Velocity.Magnitude
+                                else
+                                    obj:PivotTo(CFrame.new(obj:GetPivot().Position, targetPos))
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    print("[Halol] 強化 Combat Hooks 已啟動")
+end -- 閉合 SetupSilentAim
 
     -- 啟動所有循環與 Hook
     SetupSilentAim()
@@ -905,19 +988,38 @@ function Combat.Init(Core)
 
     -- [[ Rage 循環: Spinbot & Anti-Aim ]]
     local rageAngle = 0
+    local verticalAngle = 0
     RunService.Heartbeat:Connect(function()
         local char = lp.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        if not hrp then return end
+        if not (char and hrp) then return end
 
-        -- 大陀螺邏輯
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        
+        -- 大陀螺邏輯 (Spinbot)
         if env_global.SpinbotEnabled then
-            rageAngle = (rageAngle + env_global.SpinbotSpeed) % 360
-            -- 優化：僅旋轉角色外觀，不影響相機方向，確保自瞄能正常運作
-            hrp.CFrame = CFrame.new(hrp.Position) * CFrame.Angles(0, math.rad(rageAngle), 0)
+            local speed = env_global.SpinbotSpeed
+            rageAngle = (rageAngle + speed) % 360
+            
+            local newCF = CFrame.new(hrp.Position)
+            
+            if env_global.SpinbotMode == "Normal" then
+                hrp.CFrame = newCF * CFrame.Angles(0, math.rad(rageAngle), 0)
+            elseif env_global.SpinbotMode == "Jitter" then
+                local jitter = math.random(-45, 45)
+                hrp.CFrame = newCF * CFrame.Angles(0, math.rad(rageAngle + jitter), 0)
+            elseif env_global.SpinbotMode == "Vertical" then
+                verticalAngle = (verticalAngle + speed * 0.5) % 360
+                hrp.CFrame = newCF * CFrame.Angles(math.rad(verticalAngle), math.rad(rageAngle), 0)
+            elseif env_global.SpinbotMode == "Chaos" then
+                local rx = math.random(-180, 180)
+                local ry = math.random(-180, 180)
+                local rz = math.random(-180, 180)
+                hrp.CFrame = newCF * CFrame.Angles(math.rad(rx), math.rad(ry), math.rad(rz))
+            end
         end
 
-        -- 反自瞄邏輯
+        -- 反自瞄邏輯 (Anti-Aim)
         if env_global.AntiAimEnabled then
             if env_global.AntiAimMode == "Jitter" then
                 -- 快速抖動角度
@@ -927,8 +1029,12 @@ function Combat.Init(Core)
                 -- 獨立於 Spinbot 的旋轉
                 hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(25), 0)
             elseif env_global.AntiAimMode == "Backwards" then
-                -- 始終背對
-                hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(180), 0)
+                -- 始終背對 (假設相機方向是正向)
+                local camLook = Camera.CFrame.LookVector
+                hrp.CFrame = CFrame.new(hrp.Position, hrp.Position - Vector3.new(camLook.X, 0, camLook.Z))
+            elseif env_global.AntiAimMode == "Headless" then
+                -- 偽裝成斷頭 (向下看 90 度，但在伺服器端可能導致碰撞箱異常)
+                hrp.CFrame = hrp.CFrame * CFrame.Angles(math.rad(-90), 0, 0)
             end
         end
     end)
@@ -958,7 +1064,7 @@ function Combat.Init(Core)
                 for _, player in ipairs(Players:GetPlayers()) do
                     if player ~= lp and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
                         local hum = player.Character:FindFirstChildOfClass("Humanoid")
-                        local isTeammate = (player.Team == lp.Team and player.Team ~= nil)
+                        local isTeammate = Core.IsTeammate(player)
                         
                         if hum and hum.Health > 0 and (not env_global.TeamCheck or not isTeammate) then
                             local weapon = GetCurrentWeapon()
