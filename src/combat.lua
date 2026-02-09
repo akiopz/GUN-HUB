@@ -88,6 +88,13 @@ function Combat.Init(Core)
     env_global.InstaReloadEnabled = env_global.InstaReloadEnabled or false
     env_global.AimbotNPCs = env_global.AimbotNPCs or false
     env_global.TeamCheck = env_global.TeamCheck or true
+    env_global.AimbotVisibleOnly = env_global.AimbotVisibleOnly or true
+    env_global.AimbotFOVVisible = env_global.AimbotFOVVisible or true
+    env_global.AimbotFOVColor = env_global.AimbotFOVColor or Color3.fromRGB(0, 150, 255)
+    env_global.AimbotAutoShoot = env_global.AimbotAutoShoot or false
+    env_global.AimbotWallCheck = env_global.AimbotWallCheck or true
+    env_global.AimbotFOVTransparency = env_global.AimbotFOVTransparency or 0.5
+    env_global.AimbotFOVSides = env_global.AimbotFOVSides or 64
 
     -- [[ 註冊功能 ]]
     Core.RegisterFeature("TeleportKill", {
@@ -274,6 +281,58 @@ function Combat.Init(Core)
         end
     })
 
+    Core.UI.AddDropdown("AimbotTargetPart", {
+        Name = "瞄準部位",
+        Category = "Combat",
+        Options = {"Head", "HumanoidRootPart", "UpperTorso", "LowerTorso"},
+        Default = "Head",
+        Callback = function(v) env_global.AimbotTargetPart = v end
+    })
+
+    Core.UI.AddDropdown("AimbotPriority", {
+        Name = "優先順序",
+        Category = "Combat",
+        Options = {"Mouse", "Distance", "Health"},
+        Default = "Mouse",
+        Callback = function(v) env_global.AimbotPriority = v end
+    })
+
+    Core.UI.AddSlider("AimbotSmoothness", {
+        Name = "鎖定平滑度",
+        Category = "Combat",
+        Min = 0,
+        Max = 100,
+        Default = 50,
+        Callback = function(v) env_global.AimbotSmoothness = v / 100 end
+    })
+
+    Core.UI.AddSlider("AimbotFOV", {
+        Name = "範圍大小 (FOV)",
+        Category = "Combat",
+        Min = 10,
+        Max = 800,
+        Default = 150,
+        Callback = function(v) env_global.AimbotFOV = v end
+    })
+
+    Core.RegisterFeature("AimbotWallCheck", {
+        Name = "牆壁檢查 (Wall Check)",
+        Description = "開啟後自動瞄準將不會鎖定障礙物後的玩家",
+        Category = "Combat",
+        Callback = function(state)
+            env_global.AimbotWallCheck = state
+            env_global.AimbotVisibilityCheck = state
+        end
+    })
+
+    Core.RegisterFeature("AimbotFOVVisible", {
+        Name = "顯示範圍 (Show FOV)",
+        Category = "Combat",
+        Callback = function(state)
+            env_global.AimbotFOVVisible = state
+        end
+    })
+
     Core.RegisterFeature("AimbotRage", {
         Name = "超強鎖頭 (Rage Lock)",
         Description = "瞬間鎖定、無視平滑度、進階預測",
@@ -379,16 +438,29 @@ function Combat.Init(Core)
         local minHealth = math.huge
         local mousePos = UserInputService:GetMouseLocation()
         local localChar = lp.Character
+        local localHrp = localChar and localChar:FindFirstChild("HumanoidRootPart")
 
         -- 黏性瞄準：如果已有目標且目標存活，優先保留
         if env_global.AimbotSticky and lastTarget and lastTarget.Parent then
             local hum = lastTarget.Parent:FindFirstChildOfClass("Humanoid")
             if hum and hum.Health > 0 then
-                local screenPos, onScreen = Camera:WorldToViewportPoint(lastTarget.Position)
-                if onScreen then
-                    local mouseDistance = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
-                    if mouseDistance < env_global.AimbotFOV * 1.5 then -- 擴大一點黏性範圍
-                        return lastTarget
+                -- 隊友檢查 (黏性目標也要檢查)
+                local targetPlayer = Players:GetPlayerFromCharacter(lastTarget.Parent)
+                local isStillValid = true
+                if targetPlayer and env_global.TeamCheck and Core.IsTeammate(targetPlayer) then
+                    isStillValid = false
+                end
+
+                if isStillValid then
+                    local screenPos, onScreen = Camera:WorldToViewportPoint(lastTarget.Position)
+                    if onScreen or env_global.MagicBullet then
+                        local mouseDistance = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+                        if mouseDistance < env_global.AimbotFOV * 1.5 then
+                            -- 牆壁檢查 (黏性目標也要檢查)
+                            if not env_global.AimbotWallCheck or IsVisible(lastTarget, localChar) then
+                                return lastTarget
+                            end
+                        end
                     end
                 end
             end
@@ -407,13 +479,15 @@ function Combat.Init(Core)
                         local humanoid = char:FindFirstChildOfClass("Humanoid")
                         if humanoid and humanoid.Health > 0 then
                             -- 多骨骼掃描邏輯
-                            local bones = {env_global.AimbotTargetPart, "UpperTorso", "HumanoidRootPart", "LowerTorso"}
+                            local targetBoneName = env_global.AimbotTargetPart or "Head"
+                            local bones = {targetBoneName, "Head", "UpperTorso", "HumanoidRootPart", "LowerTorso"}
                             local bestBone = nil
                             
                             for _, boneName in ipairs(bones) do
                                 local bone = char:FindFirstChild(boneName)
                                 if bone then
-                                    if env_global.MagicBullet or IsVisible(bone, localChar) then
+                                    -- 牆壁檢查與可見度判斷
+                                    if env_global.MagicBullet or not env_global.AimbotWallCheck or IsVisible(bone, localChar) then
                                         bestBone = bone
                                         break -- 找到第一個可用骨骼就停止
                                     end
@@ -426,29 +500,16 @@ function Combat.Init(Core)
                                 if onScreen or env_global.MagicBullet then
                                     local mouseDistance = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
                                     
-                                    -- 強化：預測補償
-                                    local targetPos = bestBone.Position
-                                    if env_global.AimbotPrediction then
-                                        local velocity = humanoid.RootPart and humanoid.RootPart.Velocity or Vector3.new(0,0,0)
-                                        local ping = lp:GetNetworkPing()
-                                        local distance = (targetPos - Camera.CFrame.Position).Magnitude
-                                        local timeToHit = (distance / env_global.AimbotBulletSpeed) + ping
-                                        
-                                        targetPos = targetPos + (velocity * timeToHit)
-                                        
-                                        -- 重力補償
-                                        local gravityCompensation = 0.5 * env_global.AimbotGravity * (timeToHit ^ 2)
-                                        targetPos = targetPos + Vector3.new(0, gravityCompensation, 0)
-                                    end
-
-                                    if mouseDistance < maxDist or env_global.MagicBullet then
+                                    -- 檢查是否在 FOV 內
+                                    if mouseDistance <= env_global.AimbotFOV or env_global.MagicBullet then
                                         -- 優先度邏輯
                                         if env_global.AimbotPriority == "Mouse" then
-                                            maxDist = mouseDistance
-                                            nearest = bestBone
+                                            if mouseDistance < maxDist then
+                                                maxDist = mouseDistance
+                                                nearest = bestBone
+                                            end
                                         elseif env_global.AimbotPriority == "Distance" then
-                                            local hrp = localChar and localChar:FindFirstChild("HumanoidRootPart")
-                                            local charDistance = hrp and (hrp.Position - bestBone.Position).Magnitude or 0
+                                            local charDistance = localHrp and (localHrp.Position - bestBone.Position).Magnitude or 0
                                             if charDistance < minDistanceToChar then
                                                 minDistanceToChar = charDistance
                                                 nearest = bestBone
@@ -456,6 +517,17 @@ function Combat.Init(Core)
                                         elseif env_global.AimbotPriority == "Health" then
                                             if humanoid.Health < minHealth then
                                                 minHealth = humanoid.Health
+                                                nearest = bestBone
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
                                                 nearest = bestBone
                                             end
                                         end
@@ -873,100 +945,107 @@ end -- 閉合 SetupSilentAim
     SetupSilentAim()
     
     -- [[ Aimbot 循環 ]]
-    local lastTarget = nil
+    local fovCircle = Drawing.new("Circle")
+    fovCircle.Visible = false
+    fovCircle.Thickness = 1
+    fovCircle.NumSides = env_global.AimbotFOVSides or 64
+    fovCircle.Radius = env_global.AimbotFOV
+    fovCircle.Filled = false
+    fovCircle.Transparency = env_global.AimbotFOVTransparency or 0.5
+    fovCircle.Color = env_global.AimbotFOVColor
+
     RunService.RenderStepped:Connect(function()
-        if not env_global.AimbotEnabled then return end
-        
-        local target = Combat.GetNearestEnemy()
-        if target then
-            lastTarget = target
-            local targetPos = target.Position
-            local char = target.Parent
-            local root = char and char:FindFirstChild("HumanoidRootPart")
-            
-            -- 強化預測與重力補償
-            if (env_global.AimbotPrediction or env_global.AimbotRageMode) and root then
-                local dist = (Camera.CFrame.Position - targetPos).Magnitude
-                local bulletSpeed = env_global.AimbotBulletSpeed
+        -- 更新 FOV 圓圈
+        if env_global.AimbotFOVVisible and env_global.AimbotEnabled then
+            local mousePos = UserInputService:GetMouseLocation()
+            fovCircle.Position = mousePos
+            fovCircle.Radius = env_global.AimbotFOV
+            fovCircle.Color = env_global.AimbotFOVColor
+            fovCircle.Visible = true
+        else
+            fovCircle.Visible = false
+        end
+
+        if env_global.AimbotEnabled then
+            local target = Combat.GetNearestEnemy()
+            if target then
+                local targetPos = target.Position
+                local char = target.Parent
+                local root = char and char:FindFirstChild("HumanoidRootPart")
                 
-                -- 如果是暴力模式，自動提升預測精度
-                local timeToHit = dist / bulletSpeed
-                
-                -- 延遲補償 (Ping Compensation)
-                if env_global.AimbotPingCompensation then
-                    local ping = tonumber(lp:GetNetworkPing()) or 0.05
-                    timeToHit = timeToHit + ping
+                -- 強化預測與重力補償
+                if (env_global.AimbotPrediction or env_global.AimbotRageMode) and root then
+                    local dist = (Camera.CFrame.Position - targetPos).Magnitude
+                    local bulletSpeed = env_global.AimbotBulletSpeed or 1000
+                    
+                    local timeToHit = dist / bulletSpeed
+                    
+                    -- 延遲補償 (Ping Compensation)
+                    if env_global.AimbotPingCompensation then
+                        local ping = tonumber(lp:GetNetworkPing()) or 0.05
+                        timeToHit = timeToHit + ping
+                    end
+                    
+                    -- 進階預測 (位置 + 速度*時間 + 0.5*加速度*時間^2)
+                    local velocity = root.Velocity
+                    local predictionOffset = velocity * timeToHit
+                    
+                    -- 簡單的加速度估算 (如果目標在跳躍或快速轉向)
+                    if velocity.Magnitude > 1 then
+                        predictionOffset = predictionOffset + (velocity.Unit * 0.5 * timeToHit * timeToHit)
+                    end
+                    
+                    targetPos = targetPos + predictionOffset
+                    
+                    -- 重力補償 (0.5 * g * t^2)
+                    local gravity = env_global.AimbotGravity or 196.2
+                    local gravityCompensation = 0.5 * gravity * (timeToHit ^ 2)
+                    targetPos = targetPos + Vector3.new(0, gravityCompensation, 0)
                 end
                 
-                -- 進階預測 (位置 + 速度*時間 + 0.5*加速度*時間^2)
-                local velocity = root.Velocity
-                local predictionOffset = velocity * timeToHit
+                local currentCF = Camera.CFrame
+                local targetCF = CFrame.new(currentCF.Position, targetPos)
                 
-                -- 簡單的加速度估算 (如果目標在跳躍或快速轉向)
-                if velocity.Magnitude > 1 then
-                    predictionOffset = predictionOffset + (velocity.Unit * 0.5 * timeToHit * timeToHit)
+                -- 平滑度處理
+                if env_global.AimbotRageMode then
+                    -- 暴力模式：瞬間鎖定，無視平滑度
+                    Camera.CFrame = targetCF
+                elseif env_global.AimbotSmoothness > 0 then
+                    local smoothness = math.max(0.01, env_global.AimbotSmoothness)
+                    local alpha = 1 / (smoothness * 100)
+                    Camera.CFrame = currentCF:Lerp(targetCF, alpha)
+                else
+                    Camera.CFrame = targetCF
                 end
-                
-                targetPos = targetPos + predictionOffset
-                
-                -- 重力補償 (0.5 * g * t^2)
-                local gravity = env_global.AimbotGravity
-                local gravityCompensation = 0.5 * gravity * (timeToHit ^ 2)
-                targetPos = targetPos + Vector3.new(0, gravityCompensation, 0)
-            end
-            
-            local currentCF = Camera.CFrame
-            local targetCF = CFrame.new(currentCF.Position, targetPos)
-            
-            -- 平滑度處理
-            if env_global.AimbotRageMode then
-                -- 暴力模式：瞬間鎖定，無視平滑度
-                Camera.CFrame = targetCF
-            elseif env_global.AimbotSmoothness > 0 then
-                local smoothness = math.max(0.01, env_global.AimbotSmoothness)
-                local alpha = 1 / (smoothness * 100)
-                Camera.CFrame = currentCF:Lerp(targetCF, alpha)
-            else
-                Camera.CFrame = targetCF
-            end
 
-            -- [[ 增強型自動射擊邏輯 ]]
-            if env_global.AutoShoot then
-                local weapon = GetCurrentWeapon()
-                if weapon then
-                    -- 擴展遠程事件搜索範圍
-                    local remote = weapon:FindFirstChild("RemoteEvent") 
-                        or weapon:FindFirstChildOfClass("RemoteEvent") 
-                        or weapon:FindFirstChild("Fire")
-                        or weapon:FindFirstChild("Shoot")
-                        or weapon:FindFirstChild("Input") -- 某些遊戲使用 Input 事件
-                        or (weapon:FindFirstChild("Remotes") and weapon.Remotes:FindFirstChildOfClass("RemoteEvent"))
+                -- [[ 增強型自動射擊邏輯 ]]
+                if env_global.AutoShoot then
+                    local weapon = GetCurrentWeapon()
+                    if weapon then
+                        -- 擴展遠程事件搜索範圍
+                        local remote = weapon:FindFirstChild("RemoteEvent") 
+                            or weapon:FindFirstChildOfClass("RemoteEvent") 
+                            or weapon:FindFirstChild("Fire")
+                            or weapon:FindFirstChild("Shoot")
+                            or weapon:FindFirstChild("Input") -- 某些遊戲使用 Input 事件
+                            or (weapon:FindFirstChild("Remotes") and weapon.Remotes:FindFirstChildOfClass("RemoteEvent"))
 
-                    if remote then
-                        local targetPos = target.Position
-                        
-                        -- 如果有暴力模式，自動打頭
-                        if env_global.AimbotRageMode then
-                            targetPos = target.Position
+                        if remote then
+                            -- 模擬不同遊戲的射擊參數
+                            remote:FireServer(targetPos)
+                            
+                            -- 某些遊戲需要發送 Raycast 結果
+                            pcall(function()
+                                remote:FireServer({
+                                    [1] = targetPos,
+                                    ["Hit"] = target,
+                                    ["Distance"] = (lp.Character.Head.Position - targetPos).Magnitude
+                                })
+                            end)
                         end
-                        
-                        -- 模擬不同遊戲的射擊參數
-                        -- 1. 直接位置, 2. 目標對象, 3. 包含射擊向量的表
-                        remote:FireServer(targetPos)
-                        
-                        -- 某些遊戲需要發送 Raycast 結果
-                        pcall(function()
-                            remote:FireServer({
-                                [1] = targetPos,
-                                ["Hit"] = target,
-                                ["Distance"] = (lp.Character.Head.Position - targetPos).Magnitude
-                            })
-                        end)
                     end
                 end
             end
-        else
-            lastTarget = nil
         end
     end)
 
