@@ -144,7 +144,7 @@ end
 
 -- [[ 功能註冊系統 (為 UI 做準備) ]]
 Core.Features = {}
-Core.Categories = {"Combat", "Visuals", "Misc", "Protection"}
+Core.Categories = {"Rage", "Combat", "Visuals", "Misc", "Protection"}
 
 function Core.RegisterFeature(id, info)
     Core.Features[id] = {

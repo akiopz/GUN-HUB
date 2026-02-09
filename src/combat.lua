@@ -28,21 +28,51 @@ function Combat.Init(Core)
     env_global.NoRecoilEnabled = env_global.NoRecoilEnabled or false
     env_global.NoSpreadEnabled = env_global.NoSpreadEnabled or false
     env_global.RapidFireEnabled = env_global.RapidFireEnabled or false
+    env_global.KillAllEnabled = env_global.KillAllEnabled or false
+    env_global.HitboxExpanderEnabled = env_global.HitboxExpanderEnabled or false
+    env_global.HitboxSize = env_global.HitboxSize or 5
 
     -- [[ 註冊功能 ]]
+    Core.RegisterFeature("SilentAim", {
+        Name = "靜默瞄準 (Silent Aim)",
+        Category = "Rage",
+        Callback = function(state)
+            env_global.SilentAimEnabled = state
+        end
+    })
+
+    Core.RegisterFeature("RapidFire", {
+        Name = "快速射擊 (Rapid Fire)",
+        Category = "Rage",
+        Callback = function(state)
+            env_global.RapidFireEnabled = state
+        end
+    })
+
+    Core.RegisterFeature("KillAll", {
+        Name = "全地圖殺敵 (Kill All)",
+        Category = "Rage",
+        Callback = function(state)
+            env_global.KillAllEnabled = state
+            if state then
+                Core.Notify("暴力模式", "全地圖殺敵已啟動，請謹慎使用", 3)
+            end
+        end
+    })
+
+    Core.RegisterFeature("HitboxExpander", {
+        Name = "碰撞箱擴大 (Hitbox Expander)",
+        Category = "Rage",
+        Callback = function(state)
+            env_global.HitboxExpanderEnabled = state
+        end
+    })
+
     Core.RegisterFeature("Aimbot", {
         Name = "自動瞄準 (Aimbot)",
         Category = "Combat",
         Callback = function(state)
             env_global.AimbotEnabled = state
-        end
-    })
-
-    Core.RegisterFeature("SilentAim", {
-        Name = "靜默瞄準 (Silent Aim)",
-        Category = "Combat",
-        Callback = function(state)
-            env_global.SilentAimEnabled = state
         end
     })
 
@@ -59,14 +89,6 @@ function Combat.Init(Core)
         Category = "Combat",
         Callback = function(state)
             env_global.NoSpreadEnabled = state
-        end
-    })
-
-    Core.RegisterFeature("RapidFire", {
-        Name = "快速射擊 (Rapid Fire)",
-        Category = "Combat",
-        Callback = function(state)
-            env_global.RapidFireEnabled = state
         end
     })
 
@@ -166,6 +188,24 @@ function Combat.Init(Core)
                 Camera.CFrame = currentCF:Lerp(targetCF, env_global.AimbotSmoothness)
             else
                 Camera.CFrame = targetCF
+            end
+        end
+    end)
+
+    -- [[ Hitbox Expander 循環 ]]
+    task.spawn(function()
+        while task.wait(1) do
+            if env_global.HitboxExpanderEnabled then
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if player ~= lp and player.Character then
+                        local head = player.Character:FindFirstChild("Head")
+                        if head then
+                            head.Size = Vector3.new(env_global.HitboxSize, env_global.HitboxSize, env_global.HitboxSize)
+                            head.Transparency = 0.5
+                            head.CanCollide = false
+                        end
+                    end
+                end
             end
         end
     end)
