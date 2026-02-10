@@ -21,6 +21,7 @@ Core.hookfunction = env_global.hookfunction or (getgenv and getgenv().hookfuncti
 Core.islclosure = env_global.islclosure or function(f) return type(f) == "function" end
 Core.cloneref = env_global.cloneref or function(s) return s end
 Core.Drawing = env_global.Drawing or (getgenv and getgenv().Drawing)
+
 Core.gethui = function()
     -- 針對 Solara 等執行器的優化：優先嘗試 PlayerGui
     local lp = game:GetService("Players").LocalPlayer
@@ -46,55 +47,396 @@ Core.is_folder = env_global.isfolder or function(...) return false end
 Core.make_folder = env_global.makefolder or function(...) return false end
 Core.list_files = env_global.listfiles or function(...) return {} end
 
--- 跨執行器 API 兼容層
-function Core.GetExecutorInfo()
-    local name, version = "Unknown", "1.0"
-    pcall(function()
-        if env_global.identifyexecutor then
-            name, version = env_global.identifyexecutor()
-        elseif env_global.getexecutorname then
-            name = env_global.getexecutorname()
-        end
-    end)
-    return name, version
-end
+    -- [[ 啟動加載界面 (Loading Overlay) ]]
+    local LoadingOverlay = nil
+    function Core.ShowLoading(title)
+        local gui = Core.gethui()
+        if not gui then return end
 
--- [[ 強化隊友檢查系統 ]]
-function Core.IsTeammate(player)
-    if not player or player == Core.LocalPlayer then return true end
-    
-    -- 1. 原生 Team 檢查
-    if player.Team == Core.LocalPlayer.Team and player.Team ~= nil then
-        return true
+        if LoadingOverlay then LoadingOverlay:Destroy() end
+
+        LoadingOverlay = Instance.new("Frame")
+        local main = Instance.new("Frame")
+        local titleLabel = Instance.new("TextLabel")
+        local statusLabel = Instance.new("TextLabel")
+        local progressBarBG = Instance.new("Frame")
+        local progressBar = Instance.new("Frame")
+
+        LoadingOverlay.Name = "HalolLoading"
+        LoadingOverlay.Size = UDim2.new(1, 0, 1, 0)
+        LoadingOverlay.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+        LoadingOverlay.BackgroundTransparency = 0.5
+        LoadingOverlay.BorderSizePixel = 0
+        LoadingOverlay.Parent = gui
+
+        main.Size = UDim2.new(0, 300, 0, 120)
+        main.Position = UDim2.new(0.5, -150, 0.5, -60)
+        main.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+        main.BorderSizePixel = 0
+        main.Parent = LoadingOverlay
+        Core.AddCorner(main, UDim.new(0, 10))
+        Core.AddStroke(main, Color3.fromRGB(60, 60, 65), 2)
+
+        titleLabel.Size = UDim2.new(1, 0, 0, 40)
+        titleLabel.Position = UDim2.new(0, 0, 0, 10)
+        titleLabel.BackgroundTransparency = 1
+        titleLabel.Text = title or "HALOL SHOOTING"
+        titleLabel.TextColor3 = Color3.fromRGB(0, 150, 255)
+        titleLabel.TextSize = 20
+        titleLabel.Font = Enum.Font.GothamBold
+        titleLabel.Parent = main
+
+        statusLabel.Size = UDim2.new(1, -40, 0, 20)
+        statusLabel.Position = UDim2.new(0, 20, 0, 50)
+        statusLabel.BackgroundTransparency = 1
+        statusLabel.Text = "正在初始化系統..."
+        statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+        statusLabel.TextSize = 14
+        statusLabel.Font = Enum.Font.Gotham
+        statusLabel.Parent = main
+
+        progressBarBG.Size = UDim2.new(1, -40, 0, 6)
+        progressBarBG.Position = UDim2.new(0, 20, 0, 85)
+        progressBarBG.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+        progressBarBG.BorderSizePixel = 0
+        progressBarBG.Parent = main
+        Core.AddCorner(progressBarBG, UDim.new(0, 3))
+
+        progressBar.Size = UDim2.new(0, 0, 1, 0)
+        progressBar.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+        progressBar.BorderSizePixel = 0
+        progressBar.Parent = progressBarBG
+        Core.AddCorner(progressBar, UDim.new(0, 3))
+
+        -- 動態效果
+        task.spawn(function()
+            while LoadingOverlay and LoadingOverlay.Parent do
+                titleLabel.TextColor3 = Color3.fromRGB(0, 150, 255):lerp(Color3.fromRGB(0, 255, 255), (math.sin(tick() * 2) + 1) / 2)
+                task.wait()
+            end
+        end)
+
+        local overlay = {
+            Instance = LoadingOverlay,
+            Status = statusLabel,
+            Bar = progressBar
+        }
+
+        function overlay:Update(text, progress)
+            if self.Status then self.Status.Text = text end
+            if self.Bar then
+                Core.TweenService:Create(self.Bar, TweenInfo.new(0.3), {
+                    Size = UDim2.new(progress or 0, 0, 1, 0)
+                }):Play()
+            end
+        end
+
+        function overlay:Hide()
+            if self.Instance then
+                Core.TweenService:Create(self.Instance, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+                    BackgroundTransparency = 1
+                }):Play()
+                Core.TweenService:Create(main, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+                    Position = UDim2.new(0.5, -150, 1, 20)
+                }):Play()
+                task.delay(0.5, function() self.Instance:Destroy() end)
+            end
+        end
+
+        return overlay
     end
-    
-    -- 2. TeamColor 檢查 (部分遊戲 Team 物件可能被混淆或無效)
-    if player.TeamColor == Core.LocalPlayer.TeamColor and player.TeamColor ~= nil then
-        return true
+
+    -- [[ 跨執行器 API 兼容層 ]]
+    function Core.GetExecutorInfo()
+        local name, version = "Unknown", "1.0"
+        pcall(function()
+            if env_global.identifyexecutor then
+                name, version = env_global.identifyexecutor()
+            elseif env_global.getexecutorname then
+                name = env_global.getexecutorname()
+            end
+        end)
+        return name, version
     end
-    
-    -- 3. 屬性檢查 (常見的 'Team' 屬性)
-    local success, teamAttr = pcall(function() return player:GetAttribute("Team") end)
-    if success and teamAttr ~= nil then
-        local lpTeamAttr = Core.LocalPlayer:GetAttribute("Team")
-        if teamAttr == lpTeamAttr then return true end
+
+    -- [[ 錯誤捕捉系統 (Error Handling) ]]
+    function Core.SafeCall(func, ...)
+        local success, result = pcall(func, ...)
+        if not success then
+            warn("[Halol Error]: " .. tostring(result))
+            Core.Notify("腳本運行錯誤", tostring(result), 5)
+        end
+        return success, result
     end
-    
-    -- 4. 角色父物件檢查 (某些遊戲將同隊玩家放在同一個 Folder)
-    if player.Character and player.Character.Parent then
-        local parent = player.Character.Parent
-        if parent.Name ~= "Workspace" and parent.Name ~= "Players" then
-            if Core.LocalPlayer.Character and Core.LocalPlayer.Character.Parent == parent then
+
+    -- [[ 通知系統 (Notification System) ]]
+    local Notifications = {}
+    function Core.Notify(title, text, duration, type)
+        task.spawn(function()
+            local gui = Core.gethui()
+            if not gui then return end
+
+            local notifyFrame = Instance.new("Frame")
+            local notifyTitle = Instance.new("TextLabel")
+            local notifyText = Instance.new("TextLabel")
+            local bar = Instance.new("Frame")
+            local iconLabel = Instance.new("TextLabel")
+
+            local accentColor = Color3.fromRGB(0, 150, 255)
+            local icon = "ℹ️"
+            
+            if type == "success" then
+                accentColor = Color3.fromRGB(0, 255, 100)
+                icon = "✅"
+            elseif type == "error" then
+                accentColor = Color3.fromRGB(255, 50, 50)
+                icon = "❌"
+            elseif type == "warning" then
+                accentColor = Color3.fromRGB(255, 200, 0)
+                icon = "⚠️"
+            end
+
+            notifyFrame.Size = UDim2.new(0, 240, 0, 65)
+            notifyFrame.Position = UDim2.new(1, 20, 1, -80 - (#Notifications * 75))
+            notifyFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+            notifyFrame.BorderSizePixel = 0
+            notifyFrame.Parent = gui
+            Core.AddCorner(notifyFrame, UDim.new(0, 8))
+            Core.AddStroke(notifyFrame, Color3.fromRGB(50, 50, 55), 1)
+
+            iconLabel.Size = UDim2.new(0, 30, 0, 30)
+            iconLabel.Position = UDim2.new(0, 10, 0, 10)
+            iconLabel.BackgroundTransparency = 1
+            iconLabel.Text = icon
+            iconLabel.TextSize = 20
+            iconLabel.Parent = notifyFrame
+
+            notifyTitle.Size = UDim2.new(1, -50, 0, 20)
+            notifyTitle.Position = UDim2.new(0, 45, 0, 8)
+            notifyTitle.BackgroundTransparency = 1
+            notifyTitle.Text = title or "Halol Shooting"
+            notifyTitle.TextColor3 = accentColor
+            notifyTitle.TextSize = 14
+            notifyTitle.Font = Enum.Font.GothamBold
+            notifyTitle.TextXAlignment = Enum.TextXAlignment.Left
+            notifyTitle.Parent = notifyFrame
+
+            notifyText.Size = UDim2.new(1, -50, 0, 30)
+            notifyText.Position = UDim2.new(0, 45, 0, 25)
+            notifyText.BackgroundTransparency = 1
+            notifyText.Text = text or ""
+            notifyText.TextColor3 = Color3.fromRGB(220, 220, 220)
+            notifyText.TextSize = 12
+            notifyText.Font = Enum.Font.Gotham
+            notifyText.TextXAlignment = Enum.TextXAlignment.Left
+            notifyText.TextWrapped = true
+            notifyText.Parent = notifyFrame
+
+            bar.Size = UDim2.new(1, 0, 0, 2)
+            bar.Position = UDim2.new(0, 0, 1, -2)
+            bar.BackgroundColor3 = accentColor
+            bar.BorderSizePixel = 0
+            bar.Parent = notifyFrame
+            Core.AddCorner(bar, UDim.new(0, 2))
+
+            table.insert(Notifications, notifyFrame)
+
+            -- 進場動畫
+            Core.TweenService:Create(notifyFrame, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                Position = UDim2.new(1, -260, 1, -80 - ((#Notifications - 1) * 75))
+            }):Play()
+
+            -- 進度條動畫
+            Core.TweenService:Create(bar, TweenInfo.new(duration or 5, Enum.EasingStyle.Linear), {
+                Size = UDim2.new(0, 0, 0, 2)
+            }):Play()
+
+            task.wait(duration or 5)
+
+            -- 退場動畫
+            local tween = Core.TweenService:Create(notifyFrame, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+                Position = UDim2.new(1, 20, notifyFrame.Position.Y.Scale, notifyFrame.Position.Y.Offset)
+            })
+            tween:Play()
+            tween.Completed:Connect(function()
+                notifyFrame:Destroy()
+                for i, v in ipairs(Notifications) do
+                    if v == notifyFrame then
+                        table.remove(Notifications, i)
+                        break
+                    end
+                end
+                -- 重新排列其餘通知
+                for i, v in ipairs(Notifications) do
+                    Core.TweenService:Create(v, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                        Position = UDim2.new(1, -260, 1, -80 - ((i - 1) * 75))
+                    }):Play()
+                end
+            end)
+        end)
+    end
+
+    function Core.Success(text, duration) Core.Notify("成功", text, duration or 5, "success") end
+    function Core.Info(text, duration) Core.Notify("提示", text, duration or 5, "info") end
+    function Core.Warn(text, duration) Core.Notify("警告", text, duration or 5, "warning") end
+    function Core.Error(text, duration) Core.Notify("錯誤", text, duration or 5, "error") end
+
+    -- [[ 強化隊友檢查系統 ]]
+    function Core.IsTeammate(player)
+        if not player or player == Core.LocalPlayer then return true end
+        
+        -- 1. 原生 Team 檢查
+        if player.Team ~= nil then
+            if player.Team == Core.LocalPlayer.Team then
                 return true
             end
         end
+        
+        -- 2. TeamColor 檢查 (部分遊戲 Team 物件可能被混淆或無效)
+        if player.TeamColor == Core.LocalPlayer.TeamColor and player.TeamColor ~= nil then
+            -- 排除兩者都是 Neutral 的情況 (如果遊戲預設 Neutral 為敵對)
+            if not player.Neutral then
+                return true
+            end
+        end
+
+        -- 3. 檢查 Teams 服務中的歸屬
+        local teams = game:GetService("Teams"):GetTeams()
+        if #teams > 0 then
+            for _, team in ipairs(teams) do
+                if player:IsDescendantOf(team) and Core.LocalPlayer:IsDescendantOf(team) then
+                    return true
+                end
+            end
+        end
+        
+        -- 3. 屬性檢查 (擴展多種常見的隊伍屬性鍵值)
+        local teamKeys = {"Team", "Side", "Faction", "Alliance", "Group", "Club", "Organization"}
+        for _, key in ipairs(teamKeys) do
+            local playerAttr = player:GetAttribute(key)
+            local lpAttr = Core.LocalPlayer:GetAttribute(key)
+            if playerAttr ~= nil and playerAttr == lpAttr then
+                return true
+            end
+        end
+        
+        -- 4. 角色內部物件檢查 (TeamValue/SideValue 等)
+        local char = player.Character
+        if char then
+            local teamValue = char:FindFirstChild("Team") or char:FindFirstChild("Side") or char:FindFirstChild("Faction")
+            local lpChar = Core.LocalPlayer.Character
+            local lpTeamValue = lpChar and (lpChar:FindFirstChild("Team") or lpChar:FindFirstChild("Side") or lpChar:FindFirstChild("Faction"))
+            
+            if teamValue and lpTeamValue and teamValue:IsA("ValueBase") and lpTeamValue:IsA("ValueBase") then
+                if teamValue.Value == lpTeamValue.Value then
+                    return true
+                end
+            end
+        end
+
+        -- 5. 角色父物件檢查 (某些遊戲將同隊玩家放在 Workspace 下的特定 Folder)
+        if char and char.Parent then
+            local parent = char.Parent
+            if parent.Name ~= "Workspace" and parent.Name ~= "Players" then
+                -- 檢查名稱是否包含隊伍關鍵字
+                local pName = parent.Name:lower()
+                if pName:find("blue") or pName:find("red") or pName:find("team") or pName:find("ally") then
+                    if Core.LocalPlayer.Character and Core.LocalPlayer.Character.Parent == parent then
+                        return true
+                    end
+                end
+            end
+        end
+
+        -- 6. 字符串名稱檢查 (例如：[Police] PlayerName)
+        if player.DisplayName:find("%[") and Core.LocalPlayer.DisplayName:find("%[") then
+            local pTag = player.DisplayName:match("%[(.-)%]")
+            local lpTag = Core.LocalPlayer.DisplayName:match("%[(.-)%]")
+            if pTag and lpTag and pTag == lpTag then
+                return true
+            end
+        end
+
+        -- 7. 角色外觀顏色檢查 (BodyColors)
+        if char and Core.LocalPlayer.Character then
+            local pBC = char:FindFirstChildOfClass("BodyColors")
+            local lpBC = Core.LocalPlayer.Character:FindFirstChildOfClass("BodyColors")
+            if pBC and lpBC then
+                -- 檢查軀幹顏色是否一致
+                if pBC.TorsoColor == lpBC.TorsoColor then
+                    return true
+                end
+            end
+        end
+
+        return false
     end
 
-    -- 5. 顯示名稱顏色檢查 (進階：部分遊戲透過 Leaderboard 顏色區分)
-    -- 這裡僅作預留，具體實作需視遊戲而定
+    -- [[ NPC 敵對檢查邏輯 ]]
+    function Core.IsEnemyNPC(model)
+        if not model then return false end
+        
+        -- 1. 檢查屬性 (Team/Side/Faction)
+        local teamKeys = {"Team", "Side", "Faction", "Alliance"}
+        for _, key in ipairs(teamKeys) do
+            local val = model:GetAttribute(key)
+            if val then
+                local sVal = tostring(val):lower()
+                if sVal:find("player") or sVal:find("friendly") or sVal:find("ally") or sVal:find("citizen") then
+                    return false
+                end
+            end
+        end
 
-    return false
-end
+        -- 2. 檢查子物件 (TeamValue)
+        local teamValue = model:FindFirstChild("Team") or model:FindFirstChild("Side") or model:FindFirstChild("Faction")
+        if teamValue and teamValue:IsA("ValueBase") then
+            local val = tostring(teamValue.Value):lower()
+            if val:find("player") or val:find("friendly") or val:find("ally") then
+                return false
+            end
+        end
+
+        -- 3. 檢查頭頂標籤顏色
+        local overhead = model:FindFirstChild("Overhead") or model:FindFirstChild("NameTag") or model:FindFirstChild("Head") and model.Head:FindFirstChildOfClass("BillboardGui")
+        if overhead then
+            local textLabel = overhead:FindFirstChildOfClass("TextLabel") or (overhead:IsA("BillboardGui") and overhead:FindFirstChildOfClass("TextLabel"))
+            if textLabel then
+                local color = textLabel.TextColor3
+                -- 綠色/藍色/白色(中立) 通常非敵人
+                if (color.G > 0.7 and color.R < 0.4 and color.B < 0.4) or -- 綠色
+                   (color.B > 0.7 and color.R < 0.4 and color.G < 0.7) or -- 藍色
+                   (color.R > 0.8 and color.G > 0.8 and color.B > 0.8) then -- 白色
+                    return false
+                end
+            end
+        end
+
+        -- 4. 檢查名稱關鍵字
+        local name = model.Name:lower()
+        local keywords = {"friendly", "ally", "guard", "citizen", "civilian", "neutral", "shop", "quest"}
+        for _, kw in ipairs(keywords) do
+            if name:find(kw) then
+                return false
+            end
+        end
+
+        return true -- 預設視為敵人
+    end
+
+    -- [[ 統一敵對判斷入口 ]]
+    function Core.IsEnemy(target)
+        if not target then return false end
+        
+        local player = game:GetService("Players"):GetPlayerFromCharacter(target)
+        if player then
+            -- 如果是玩家，判斷是否為隊友
+            return not Core.IsTeammate(player)
+        else
+            -- 如果是 NPC
+            return Core.IsEnemyNPC(target)
+        end
+    end
 
 -- 服務獲取優化 (含 cloneref 支援)
 function Core.get_service(name)
@@ -111,17 +453,69 @@ Core.RunService = Core.get_service("RunService")
 Core.UserInputService = Core.get_service("UserInputService")
 Core.HttpService = Core.get_service("HttpService")
 Core.StarterGui = Core.get_service("StarterGui")
+Core.TweenService = Core.get_service("TweenService")
 Core.LocalPlayer = Core.Players.LocalPlayer
 Core.Camera = workspace.CurrentCamera
 
--- 通知函數
-function Core.Notify(title, text, duration)
-    pcall(function()
-        Core.StarterGui:SetCore("SendNotification", {
-            Title = tostring(title),
-            Text = tostring(text),
-            Duration = duration or 5
-        })
+-- [[ UI 輔助工具 ]]
+function Core.AddCorner(parent, radius)
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = radius or UDim.new(0, 6)
+    corner.Parent = parent
+    return corner
+end
+
+function Core.AddStroke(parent, color, thickness)
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = color or Color3.fromRGB(60, 60, 65)
+    stroke.Thickness = thickness or 1
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Parent = parent
+    return stroke
+end
+
+function Core.AddGradient(parent, colors)
+    local gradient = Instance.new("UIGradient")
+    gradient.Color = ColorSequence.new(colors)
+    gradient.Rotation = 90
+    gradient.Parent = parent
+    return gradient
+end
+
+-- [[ 水印系統 ]]
+function Core.CreateWatermark()
+    local gui = Core.gethui()
+    if not gui then return end
+
+    local watermark = Instance.new("Frame")
+    local text = Instance.new("TextLabel")
+
+    watermark.Name = "HalolWatermark"
+    watermark.Size = UDim2.new(0, 200, 0, 25)
+    watermark.Position = UDim2.new(0, 10, 0, 10)
+    watermark.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+    watermark.BorderSizePixel = 0
+    watermark.Parent = gui
+    Core.AddCorner(watermark)
+    Core.AddStroke(watermark)
+
+    text.Size = UDim2.new(1, 0, 1, 0)
+    text.BackgroundTransparency = 1
+    text.Text = "Halol GUN-HUB | FPS: 0 | Ping: 0ms"
+    text.TextColor3 = Color3.new(1, 1, 1)
+    text.TextSize = 12
+    text.Font = Enum.Font.Code
+    text.Parent = watermark
+
+    Core.RunService.RenderStepped:Connect(function(dt)
+        local fps = math.floor(1/dt)
+        local ping = 0
+        pcall(function() ping = math.floor(Core.LocalPlayer:GetNetworkPing() * 1000) end)
+        text.Text = string.format("Halol GUN-HUB | FPS: %d | Ping: %dms", fps, ping)
+        
+        -- 動態調整寬度
+        local textBounds = text.TextBounds.X
+        watermark.Size = UDim2.new(0, textBounds + 20, 0, 25)
     end)
 end
 
@@ -146,31 +540,35 @@ end
 -- [[ 配置管理系統優化 ]]
 local ConfigFolder = "射擊類/configs"
 local ConfigCache = {}
+Core.CurrentConfig = {}
 
 function Core.SaveConfig(name, data)
     pcall(function()
-        local json = Core.HttpService:JSONEncode(data)
+        local json = Core.HttpService:JSONEncode(data or Core.CurrentConfig)
         
         -- Dirty check: 僅在資料變動時寫入
-        if ConfigCache[name] == json then return end
+        if ConfigCache[name or "default"] == json then return end
         
         if not Core.is_folder("射擊類") then Core.make_folder("射擊類") end
         if not Core.is_folder(ConfigFolder) then Core.make_folder(ConfigFolder) end
         
-        Core.write_file(ConfigFolder .. "/" .. name .. ".json", json)
-        ConfigCache[name] = json
+        Core.write_file(ConfigFolder .. "/" .. (name or "default") .. ".json", json)
+        ConfigCache[name or "default"] = json
     end)
 end
 
 function Core.LoadConfig(name)
-    local path = ConfigFolder .. "/" .. name .. ".json"
+    local path = ConfigFolder .. "/" .. (name or "default") .. ".json"
     if Core.is_file(path) then
         local ok, data = pcall(function()
             local content = Core.read_file(path)
-            ConfigCache[name] = content
+            ConfigCache[name or "default"] = content
             return Core.HttpService:JSONDecode(content)
         end)
-        if ok then return data end
+        if ok then 
+            Core.CurrentConfig = data
+            return data 
+        end
     end
     return nil
 end
@@ -190,7 +588,7 @@ end
 
 -- [[ 功能註冊系統 (為 UI 做準備) ]]
 Core.Features = {}
-Core.Categories = {"All", "Favorites", "Rage", "Combat", "Visuals", "World", "Misc", "Protection"}
+Core.Categories = {"All", "Favorites", "Rage", "Combat", "Visuals", "World", "Misc", "Protection", "Config"}
 Core.CategoryIcons = {
     All = "🏠",
     Favorites = "⭐",
@@ -199,7 +597,8 @@ Core.CategoryIcons = {
     Visuals = "👁️",
     World = "🌍",
     Misc = "⚙️",
-    Protection = "🛡️"
+    Protection = "🛡️",
+    Config = "💾"
 }
 
 function Core.RegisterFeature(id, info)
@@ -233,6 +632,7 @@ end
 -- [[ GUI 核心系統 ]]
 function Core.CreateGUI()
     if Core.MainGui then Core.MainGui:Destroy() end
+    Core.CreateWatermark() -- 啟動水印
 
     local targetParent = Core.gethui()
     if not targetParent then
@@ -240,10 +640,12 @@ function Core.CreateGUI()
         return
     end
 
-    local TweenService = game:GetService("TweenService")
+    local TweenService = Core.TweenService
     local ScreenGui = Instance.new("ScreenGui")
     local MainFrame = Instance.new("Frame")
     local Title = Instance.new("TextLabel")
+    local MinButton = Instance.new("TextButton")
+    local CloseButton = Instance.new("TextButton")
     local TabContainer = Instance.new("Frame")
     local FeatureList = Instance.new("ScrollingFrame")
     local UIListLayout = Instance.new("UIListLayout")
@@ -264,23 +666,117 @@ function Core.CreateGUI()
     MainFrame.Position = UDim2.new(0.5, -200, 0.5, -150)
     MainFrame.Size = UDim2.new(0, 420, 0, 320)
     MainFrame.Active = true
-    MainFrame.Draggable = true
+    Core.AddCorner(MainFrame, UDim.new(0, 8))
+    Core.AddStroke(MainFrame)
+
+    -- 改良版拖拽系統
+    local dragging, dragInput, dragStart, startPos
+    local function updateDrag(input)
+        local delta = input.Position - dragStart
+        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
 
     Title.Name = "Title"
     Title.Parent = MainFrame
     Title.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
     Title.Size = UDim2.new(1, 0, 0, 35)
     Title.Font = Enum.Font.GothamBold
-    Title.Text = "  Halol GUN-HUB v1.0.6"
+    Title.Text = "  Halol GUN-HUB v1.2.0"
     Title.TextColor3 = Color3.fromRGB(255, 255, 255)
     Title.TextSize = 14
     Title.TextXAlignment = Enum.TextXAlignment.Left
+    Core.AddCorner(Title, UDim.new(0, 8))
+
+    Title.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = MainFrame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    Title.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            dragInput = input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            updateDrag(input)
+        end
+    end)
+
+    -- 最小化功能
+    local minimized = false
+    MinButton.Name = "MinButton"
+    MinButton.Parent = Title
+    MinButton.Size = UDim2.new(0, 30, 0, 30)
+    MinButton.Position = UDim2.new(1, -65, 0, 2)
+    MinButton.BackgroundTransparency = 1
+    MinButton.Text = "-"
+    MinButton.TextColor3 = Color3.new(1, 1, 1)
+    MinButton.TextSize = 20
+    MinButton.Font = Enum.Font.GothamBold
+
+    MinButton.MouseButton1Click:Connect(function()
+        minimized = not minimized
+        if minimized then
+            TabContainer.Visible = false
+            FeatureList.Visible = false
+            SearchBar.Visible = false
+            TweenService:Create(MainFrame, TweenInfo.new(0.3), {Size = UDim2.new(0, 420, 0, 35)}):Play()
+            MinButton.Text = "+"
+        else
+            TweenService:Create(MainFrame, TweenInfo.new(0.3), {Size = UDim2.new(0, 420, 0, 320)}):Play()
+            task.delay(0.3, function()
+                TabContainer.Visible = true
+                FeatureList.Visible = true
+                SearchBar.Visible = true
+            end)
+            MinButton.Text = "-"
+        end
+    end)
+
+    CloseButton.Name = "CloseButton"
+    CloseButton.Parent = Title
+    CloseButton.Size = UDim2.new(0, 30, 0, 30)
+    CloseButton.Position = UDim2.new(1, -35, 0, 2)
+    CloseButton.BackgroundTransparency = 1
+    CloseButton.Text = "×"
+    CloseButton.TextColor3 = Color3.fromRGB(255, 100, 100)
+    CloseButton.TextSize = 20
+    CloseButton.Font = Enum.Font.GothamBold
+
+    CloseButton.MouseButton1Click:Connect(function()
+        ScreenGui:Destroy()
+    end)
+    Core.AddGradient(Title, {
+        ColorStack = {
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 150, 255)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 80, 200))
+        }
+    })
+    -- 修正上面的 Gradient 參數，傳入正確的 ColorSequence
+    local titleGradient = Title:FindFirstChildOfClass("UIGradient")
+    if titleGradient then
+        titleGradient.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 150, 255)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 80, 200))
+        })
+    end
 
     TabContainer.Name = "TabContainer"
     TabContainer.Parent = MainFrame
     TabContainer.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
     TabContainer.Position = UDim2.new(0, 0, 0, 35)
     TabContainer.Size = UDim2.new(0, 110, 1, -35)
+    Core.AddCorner(TabContainer, UDim.new(0, 8))
 
     SearchBar.Name = "SearchBar"
     SearchBar.Parent = MainFrame
@@ -288,6 +784,8 @@ function Core.CreateGUI()
     SearchBar.Position = UDim2.new(0, 115, 0, 40)
     SearchBar.Size = UDim2.new(1, -125, 0, 30)
     SearchBar.BorderSizePixel = 0
+    Core.AddCorner(SearchBar)
+    Core.AddStroke(SearchBar)
 
     SearchInput.Name = "SearchInput"
     SearchInput.Parent = SearchBar
@@ -309,8 +807,16 @@ function Core.CreateGUI()
     FeatureList.ScrollBarThickness = 2
     FeatureList.CanvasSize = UDim2.new(0, 0, 0, 0)
     FeatureList.BorderSizePixel = 0
+    FeatureList.ScrollBarImageColor3 = Color3.fromRGB(0, 150, 255)
 
-    UIListLayout.Parent = FeatureList
+    -- 確保 ScrollingFrame 支援 GroupTransparency
+    local CanvasGroup = Instance.new("CanvasGroup")
+    CanvasGroup.Name = "ContentGroup"
+    CanvasGroup.Parent = FeatureList
+    CanvasGroup.Size = UDim2.new(1, 0, 1, 0)
+    CanvasGroup.BackgroundTransparency = 1
+    
+    UIListLayout.Parent = CanvasGroup
     UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
     UIListLayout.Padding = UDim.new(0, 5)
 
@@ -319,8 +825,8 @@ function Core.CreateGUI()
 
     -- 分類按鈕與過濾邏輯
     local function RefreshFeatures()
-        if not FeatureList then return end
-        for _, child in ipairs(FeatureList:GetChildren()) do
+        local content = FeatureList:FindFirstChild("ContentGroup") or FeatureList
+        for _, child in ipairs(content:GetChildren()) do
             if child:IsA("Frame") then 
                 local featCat = child:GetAttribute("Category")
                 local featName = child:GetAttribute("DisplayName") or child.Name
@@ -357,9 +863,12 @@ function Core.CreateGUI()
         btn.TextSize = 12
         btn.BorderSizePixel = 0
         btn.TextXAlignment = Enum.TextXAlignment.Left
+        Core.AddCorner(btn)
         
         btn.MouseEnter:Connect(function()
-            TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(60, 60, 65)}):Play()
+            if currentCategory ~= cat then
+                TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(60, 60, 65)}):Play()
+            end
         end)
         
         btn.MouseLeave:Connect(function()
@@ -369,15 +878,20 @@ function Core.CreateGUI()
         end)
 
         btn.MouseButton1Click:Connect(function()
+            if currentCategory == cat then return end
             currentCategory = cat
+            
+            -- 分頁動畫
+            FeatureList.CanvasPosition = Vector2.new(0, 0)
+            FeatureList.GroupTransparency = 1
+            TweenService:Create(FeatureList, TweenInfo.new(0.3), {GroupTransparency = 0}):Play()
+            
             for _, otherBtn in ipairs(TabContainer:GetChildren()) do
                 if otherBtn:IsA("TextButton") then
-                    otherBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
-                    otherBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+                    TweenService:Create(otherBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(45, 45, 50), TextColor3 = Color3.fromRGB(200, 200, 200)}):Play()
                 end
             end
-            btn.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
-            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 150, 255), TextColor3 = Color3.fromRGB(255, 255, 255)}):Play()
             RefreshFeatures()
         end)
         
@@ -391,22 +905,29 @@ function Core.CreateGUI()
     -- 自動更新 CanvasSize
     UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         FeatureList.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y + 10)
+        local content = FeatureList:FindFirstChild("ContentGroup")
+        if content then
+            content.Size = UDim2.new(1, 0, 0, UIListLayout.AbsoluteContentSize.Y + 10)
+        end
     end)
 
     -- 新增功能按鈕的函數
     Core.UI = {}
     
     function Core.UI.AddFeature(id, info)
+        local content = FeatureList:FindFirstChild("ContentGroup") or FeatureList
         local frame = Instance.new("Frame")
         local label = Instance.new("TextLabel")
         local toggle = Instance.new("TextButton")
         local favorite = Instance.new("TextButton")
+        local toggleCircle = Instance.new("Frame")
 
         frame.Name = id
-        frame.Parent = FeatureList
+        frame.Parent = content
         frame.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
         frame.Size = UDim2.new(1, -5, 0, 35)
         frame.BorderSizePixel = 0
+        Core.AddCorner(frame)
         frame:SetAttribute("Category", info.Category)
         frame:SetAttribute("DisplayName", info.Name)
         frame:SetAttribute("IsFavorite", info.Favorite)
@@ -432,13 +953,17 @@ function Core.CreateGUI()
         label.TextXAlignment = Enum.TextXAlignment.Left
 
         toggle.Parent = frame
-        toggle.Size = UDim2.new(0, 50, 0, 25)
-        toggle.Position = UDim2.new(1, -55, 0, 5)
-        toggle.BackgroundColor3 = info.Enabled and Color3.fromRGB(0, 200, 100) or Color3.fromRGB(200, 50, 50)
-        toggle.Text = info.Enabled and "ON" or "OFF"
-        toggle.TextColor3 = Color3.new(1, 1, 1)
-        toggle.Font = Enum.Font.GothamBold
-        toggle.TextSize = 10
+        toggle.Size = UDim2.new(0, 40, 0, 20)
+        toggle.Position = UDim2.new(1, -50, 0, 7)
+        toggle.BackgroundColor3 = info.Enabled and Color3.fromRGB(0, 150, 255) or Color3.fromRGB(60, 60, 65)
+        toggle.Text = ""
+        Core.AddCorner(toggle, UDim.new(1, 0))
+
+        toggleCircle.Parent = toggle
+        toggleCircle.Size = UDim2.new(0, 14, 0, 14)
+        toggleCircle.Position = info.Enabled and UDim2.new(1, -17, 0, 3) or UDim2.new(0, 3, 0, 3)
+        toggleCircle.BackgroundColor3 = Color3.new(1, 1, 1)
+        Core.AddCorner(toggleCircle, UDim.new(1, 0))
 
         favorite.MouseButton1Click:Connect(function()
             info.Favorite = not info.Favorite
@@ -453,10 +978,12 @@ function Core.CreateGUI()
         toggle.MouseButton1Click:Connect(function()
             local success, newState = pcall(function() return Core.ToggleFeature(id) end)
             if success then
-                toggle.BackgroundColor3 = newState and Color3.fromRGB(0, 200, 100) or Color3.fromRGB(200, 50, 50)
-                toggle.Text = newState and "ON" or "OFF"
-            else
-                warn("[Halol UI Error] Failed to toggle feature: " .. tostring(id))
+                TweenService:Create(toggle, TweenInfo.new(0.2), {BackgroundColor3 = newState and Color3.fromRGB(0, 150, 255) or Color3.fromRGB(60, 60, 65)}):Play()
+                TweenService:Create(toggleCircle, TweenInfo.new(0.2), {Position = newState and UDim2.new(1, -17, 0, 3) or UDim2.new(0, 3, 0, 3)}):Play()
+                
+                -- 自動儲存
+                Core.CurrentConfig[id] = newState
+                Core.SaveConfig("default")
             end
         end)
 
@@ -464,6 +991,7 @@ function Core.CreateGUI()
     end
 
     function Core.UI.AddDropdown(id, info)
+        local content = FeatureList:FindFirstChild("ContentGroup") or FeatureList
         local frame = Instance.new("Frame")
         local label = Instance.new("TextLabel")
         local dropBtn = Instance.new("TextButton")
@@ -475,7 +1003,7 @@ function Core.CreateGUI()
         local isOpen = false
 
         frame.Name = id
-        frame.Parent = FeatureList
+        frame.Parent = content
         frame.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
         frame.Size = UDim2.new(1, -5, 0, 40)
         frame.BorderSizePixel = 0
@@ -532,6 +1060,10 @@ function Core.CreateGUI()
                 dropList.Visible = false
                 dropList.Size = UDim2.new(0.5, -10, 0, 0)
                 if info.Callback then info.Callback(opt) end
+                
+                -- 自動儲存
+                Core.CurrentConfig[id] = opt
+                Core.SaveConfig("default")
             end)
         end
 
@@ -550,6 +1082,7 @@ function Core.CreateGUI()
     end
 
     function Core.UI.AddSlider(id, info)
+        local content = FeatureList:FindFirstChild("ContentGroup") or FeatureList
         local frame = Instance.new("Frame")
         local label = Instance.new("TextLabel")
         local sliderBG = Instance.new("Frame")
@@ -562,7 +1095,7 @@ function Core.CreateGUI()
         local current = default
 
         frame.Name = id
-        frame.Parent = FeatureList
+        frame.Parent = content
         frame.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
         frame.Size = UDim2.new(1, -5, 0, 45)
         frame.BorderSizePixel = 0
@@ -605,6 +1138,9 @@ function Core.CreateGUI()
             current = math.floor(min + (max - min) * pos)
             valueLabel.Text = tostring(current)
             if info.Callback then info.Callback(current) end
+            
+            -- 自動儲存 (節流：僅在放開滑鼠時儲存較重，這裡先即時更新變數)
+            Core.CurrentConfig[id] = current
         end
 
         local dragging = false
@@ -624,27 +1160,33 @@ function Core.CreateGUI()
         Core.UserInputService.InputEnded:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 then
                 dragging = false
+                Core.SaveConfig("default") -- 放開時寫入檔案
             end
         end)
 
         FeatureList.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y)
     end
 
-    function Core.UI.AddKeybind(id, info)
+    function Core.UI.AddColorPicker(id, info)
+        local content = FeatureList:FindFirstChild("ContentGroup") or FeatureList
         local frame = Instance.new("Frame")
         local label = Instance.new("TextLabel")
-        local bindBtn = Instance.new("TextButton")
+        local colorDisplay = Instance.new("TextButton")
+        
+        local default = info.Default or Color3.new(1, 1, 1)
+        local current = default
 
         frame.Name = id
-        frame.Parent = FeatureList
+        frame.Parent = content
         frame.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
         frame.Size = UDim2.new(1, -5, 0, 35)
         frame.BorderSizePixel = 0
+        Core.AddCorner(frame)
         frame:SetAttribute("Category", info.Category)
         frame:SetAttribute("DisplayName", info.Name)
 
         label.Parent = frame
-        label.Size = UDim2.new(1, -80, 1, 0)
+        label.Size = UDim2.new(1, -60, 1, 0)
         label.Position = UDim2.new(0, 10, 0, 0)
         label.BackgroundTransparency = 1
         label.Text = info.Name
@@ -653,43 +1195,51 @@ function Core.CreateGUI()
         label.Font = Enum.Font.Gotham
         label.TextXAlignment = Enum.TextXAlignment.Left
 
-        bindBtn.Parent = frame
-        bindBtn.Size = UDim2.new(0, 70, 0, 25)
-        bindBtn.Position = UDim2.new(1, -75, 0, 5)
-        bindBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 65)
-        bindBtn.Text = info.Default and info.Default.Name or "NONE"
-        bindBtn.TextColor3 = Color3.fromRGB(0, 150, 255)
-        bindBtn.Font = Enum.Font.GothamBold
-        bindBtn.TextSize = 10
+        colorDisplay.Parent = frame
+        colorDisplay.Size = UDim2.new(0, 40, 0, 20)
+        colorDisplay.Position = UDim2.new(1, -50, 0, 7)
+        colorDisplay.BackgroundColor3 = current
+        colorDisplay.Text = ""
+        Core.AddCorner(colorDisplay)
+        Core.AddStroke(colorDisplay, Color3.new(1, 1, 1), 1)
 
-        local binding = false
-        bindBtn.MouseButton1Click:Connect(function()
-            binding = true
-            bindBtn.Text = "..."
-        end)
-
-        Core.UserInputService.InputBegan:Connect(function(input)
-            if binding then
-                if input.UserInputType == Enum.UserInputType.Keyboard then
-                    binding = false
-                    bindBtn.Text = input.KeyCode.Name
-                    if info.Callback then info.Callback(input.KeyCode) end
-                elseif input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.MouseButton2 then
-                    binding = false
-                    bindBtn.Text = input.UserInputType.Name
-                    if info.Callback then info.Callback(input.UserInputType) end
-                end
+        colorDisplay.MouseButton1Click:Connect(function()
+            -- 簡單的顏色切換 (為了演示，實際應使用更完整的顏色選擇器)
+            -- 這裡循環切換幾種顏色，或彈出輸入框
+            local colors = {
+                Color3.fromRGB(255, 255, 255),
+                Color3.fromRGB(255, 0, 0),
+                Color3.fromRGB(0, 255, 0),
+                Color3.fromRGB(0, 0, 255),
+                Color3.fromRGB(255, 255, 0),
+                Color3.fromRGB(255, 0, 255),
+                Color3.fromRGB(0, 255, 255)
+            }
+            local index = 1
+            for i, c in ipairs(colors) do
+                if c == current then index = i break end
             end
+            index = (index % #colors) + 1
+            current = colors[index]
+            colorDisplay.BackgroundColor3 = current
+            
+            if info.Callback then info.Callback(current) end
+            
+            -- 自動儲存
+            Core.CurrentConfig[id] = {r = current.R, g = current.G, b = current.B}
+            Core.SaveConfig("default")
         end)
 
         FeatureList.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y)
     end
 
     -- 初始化現有功能
+    local savedConfig = Core.LoadConfig("default") or {}
+    
     for id, info in pairs(Core.Features) do
         Core.UI.AddFeature(id, info)
     end
-
+    
     -- 自動開啟選單 (防止隱藏)
     MainFrame.Visible = true
     ScreenGui.Enabled = true

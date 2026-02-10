@@ -24,18 +24,125 @@ function Misc.Init(Core)
     
     env_global.FlyEnabled = env_global.FlyEnabled or false
     env_global.FlySpeed = env_global.FlySpeed or 50
+    env_global.VelocityFly = env_global.VelocityFly or false
     
+    env_global.TeleportWalk = env_global.TeleportWalk or false
+    env_global.TeleportWalkDist = env_global.TeleportWalkDist or 5
+
     env_global.Noclip = env_global.Noclip or false
+    env_global.LavaNoclip = env_global.LavaNoclip or false
     env_global.NoSlow = env_global.NoSlow or false
     env_global.DesyncEnabled = env_global.DesyncEnabled or false
     env_global.DesyncAmount = env_global.DesyncAmount or 5
     env_global.Spider = env_global.Spider or false
     env_global.Bhop = env_global.Bhop or false
+    env_global.SprintEnabled = env_global.SprintEnabled or false
+    env_global.SprintMultiplier = env_global.SprintMultiplier or 1.5
     env_global.KillEffect = env_global.KillEffect or false
     env_global.KillSound = env_global.KillSound or false
     env_global.AntiAFK = env_global.AntiAFK or false
+    env_global.AutoClicker = env_global.AutoClicker or false
+    env_global.AutoClickDelay = env_global.AutoClickDelay or 0.1
 
     -- [[ 註冊功能 ]]
+    Core.RegisterFeature("WalkSpeedEnabled", {
+        Name = "加速模式 (Speed Hack)",
+        Description = "自定義移動速度",
+        Category = "Movement",
+        Callback = function(state) env_global.WalkSpeedEnabled = state end
+    })
+
+    Core.UI.AddSlider("WalkSpeedValue", {
+        Name = "行走速度數值",
+        Category = "Movement",
+        Min = 16,
+        Max = 500,
+        Default = env_global.WalkSpeed,
+        Callback = function(v) env_global.WalkSpeed = v end
+    })
+
+    Core.RegisterFeature("SprintEnabled", {
+        Name = "衝刺模式 (Sprint)",
+        Description = "按住 Shift 鍵進行衝刺",
+        Category = "Movement",
+        Callback = function(state) env_global.SprintEnabled = state end
+    })
+
+    Core.UI.AddSlider("SprintMultiplier", {
+        Name = "衝刺速度倍率",
+        Category = "Movement",
+        Min = 1.1,
+        Max = 10.0,
+        Step = 0.1,
+        Default = env_global.SprintMultiplier,
+        Callback = function(v) env_global.SprintMultiplier = v end
+    })
+
+    Core.RegisterFeature("JumpPowerEnabled", {
+        Name = "跳躍加強 (Jump Power)",
+        Category = "Movement",
+        Callback = function(state) env_global.JumpPowerEnabled = state end
+    })
+
+    Core.UI.AddSlider("JumpPowerValue", {
+        Name = "跳躍高度數值",
+        Category = "Movement",
+        Min = 50,
+        Max = 1000,
+        Default = env_global.JumpPower,
+        Callback = function(v) env_global.JumpPower = v end
+    })
+
+    Core.RegisterFeature("InfJump", {
+        Name = "無限跳躍 (Inf Jump)",
+        Category = "Movement",
+        Callback = function(state) env_global.InfJump = state end
+    })
+
+    Core.RegisterFeature("Noclip", {
+        Name = "穿牆 (Noclip)",
+        Category = "Movement",
+        Callback = function(state) env_global.Noclip = state end
+    })
+
+    Core.RegisterFeature("LavaNoclip", {
+        Name = "穿過岩漿 (Lava Noclip)",
+        Description = "使你能夠無視碰撞並穿過名為 Lava 或 Magma 的零件",
+        Category = "Movement",
+        Callback = function(state) env_global.LavaNoclip = state end
+    })
+
+    Core.RegisterFeature("FlyEnabled", {
+        Name = "飛行模式 (Fly)",
+        Category = "Movement",
+        Callback = function(state) env_global.FlyEnabled = state end
+    })
+
+    Core.UI.AddSlider("FlySpeedValue", {
+        Name = "飛行速度數值",
+        Category = "Movement",
+        Min = 10,
+        Max = 1000,
+        Default = env_global.FlySpeed,
+        Callback = function(v) env_global.FlySpeed = v end
+    })
+
+    Core.RegisterFeature("AutoClicker", {
+        Name = "自動點擊 (Auto Clicker)",
+        Category = "Misc",
+        Callback = function(state) env_global.AutoClicker = state end
+    })
+
+    Core.UI.AddSlider("AutoClickDelay", {
+        Name = "點擊間隔 (秒)",
+        Category = "Misc",
+        Min = 0.01,
+        Max = 1.0,
+        Step = 0.01,
+        Default = env_global.AutoClickDelay,
+        Callback = function(v) env_global.AutoClickDelay = v end
+    })
+
     Core.RegisterFeature("AntiAFK", {
         Name = "防掛機 (Anti-AFK)",
         Category = "Misc",
@@ -63,87 +170,78 @@ function Misc.Init(Core)
         Category = "Misc",
         Callback = function(state) env_global.KillSound = state end
     })
-    Core.RegisterFeature("WalkSpeedEnabled", {
-        Name = "速度加強 (Speed)",
-        Category = "Misc",
-        Callback = function(state) env_global.WalkSpeedEnabled = state end
-    })
-
-    Core.UI.AddSlider("WalkSpeedValue", {
-        Name = "行走速度數值",
-        Category = "Misc",
-        Min = 16,
-        Max = 300,
-        Default = env_global.WalkSpeed,
-        Callback = function(v) env_global.WalkSpeed = v end
-    })
 
     Core.RegisterFeature("CFrameSpeedEnabled", {
         Name = "瞬移加速 (CFrame Speed)",
-        Category = "Misc",
+        Category = "Movement",
         Callback = function(state) env_global.CFrameSpeedEnabled = state end
     })
 
     Core.UI.AddSlider("CFrameSpeedValue", {
         Name = "瞬移速度數值",
-        Category = "Misc",
+        Category = "Movement",
         Min = 1,
-        Max = 50,
+        Max = 100,
         Default = env_global.CFrameSpeed,
         Callback = function(v) env_global.CFrameSpeed = v end
     })
     
-    Core.RegisterFeature("JumpPowerEnabled", {
-        Name = "跳躍加強 (Jump Power)",
-        Category = "Misc",
-        Callback = function(state) env_global.JumpPowerEnabled = state end
+    Core.RegisterFeature("VelocityFly", {
+        Name = "物理飛行 (Velocity Fly)",
+        Description = "基於物理速度的飛行，較不易被某些 AC 偵測",
+        Category = "Movement",
+        Callback = function(state) env_global.VelocityFly = state end
     })
 
-    Core.UI.AddSlider("JumpPowerValue", {
-        Name = "跳躍高度數值",
-        Category = "Misc",
-        Min = 50,
-        Max = 500,
-        Default = env_global.JumpPower,
-        Callback = function(v) env_global.JumpPower = v end
+    Core.RegisterFeature("TeleportWalk", {
+        Name = "瞬移行走 (TP Walk)",
+        Description = "行走時向前瞬移，實現極速移動",
+        Category = "Movement",
+        Callback = function(state) env_global.TeleportWalk = state end
     })
 
-    Core.RegisterFeature("InfJump", {
-        Name = "無限跳躍 (Inf Jump)",
-        Category = "Misc",
-        Callback = function(state) env_global.InfJump = state end
+    Core.UI.AddSlider("TeleportWalkDist", {
+        Name = "瞬移距離",
+        Category = "Movement",
+        Min = 1,
+        Max = 50,
+        Default = env_global.TeleportWalkDist,
+        Callback = function(v) env_global.TeleportWalkDist = v end
     })
 
-    Core.RegisterFeature("FlyEnabled", {
-        Name = "飛行模式 (Fly)",
-        Category = "Misc",
-        Callback = function(state) env_global.FlyEnabled = state end
+    Core.RegisterFeature("NoSlow", {
+        Name = "無減速 (No Slow)",
+        Description = "防止開鏡、射擊或受傷時的移動減速",
+        Category = "Movement",
+        Callback = function(state) env_global.NoSlow = state end
     })
 
-    Core.UI.AddSlider("FlySpeedValue", {
-        Name = "飛行速度數值",
+    Core.RegisterFeature("Desync", {
+        Name = "回朔/脫節 (Desync)",
+        Description = "使敵人在其視角中看到你的位置滯後或回朔",
         Category = "Misc",
-        Min = 10,
-        Max = 500,
-        Default = env_global.FlySpeed,
-        Callback = function(v) env_global.FlySpeed = v end
+        Callback = function(state) env_global.DesyncEnabled = state end
     })
 
-    Core.RegisterFeature("FullBright", {
-        Name = "全亮模式 (Full Bright)",
-        Category = "Visuals",
-        Callback = function(state)
-            env_global.FullBright = state
-            if state then
-                game:GetService("Lighting").Brightness = 2
-                game:GetService("Lighting").ClockTime = 14
-                game:GetService("Lighting").FogEnd = 100000
-                game:GetService("Lighting").GlobalShadows = false
-            else
-                -- 恢復預設 (概略值)
-                game:GetService("Lighting").GlobalShadows = true
-            end
-        end
+    Core.RegisterFeature("Spider", {
+        Name = "蜘蛛爬牆 (Spider)",
+        Category = "Movement",
+        Callback = function(state) env_global.Spider = state end
+    })
+
+    Core.RegisterFeature("Bhop", {
+        Name = "自動連跳 (Bhop)",
+        Category = "Movement",
+        Callback = function(state) env_global.Bhop = state end
+    })
+
+    Core.UI.AddSlider("DesyncAmount", {
+        Name = "反瞄準強度 (Desync)",
+        Category = "Misc",
+        Min = 1,
+        Max = 100,
+        Default = env_global.DesyncAmount,
+        Callback = function(v) env_global.DesyncAmount = v end
     })
 
     Core.RegisterFeature("ServerHop", {
@@ -170,37 +268,25 @@ function Misc.Init(Core)
         end
     })
 
-    Core.RegisterFeature("Noclip", {
-        Name = "穿牆 (Noclip)",
-        Category = "Misc",
-        Callback = function(state) env_global.Noclip = state end
-    })
-    
-    Core.RegisterFeature("NoSlow", {
-        Name = "無減速 (No Slow)",
-        Description = "防止開鏡、射擊或受傷時的移動減速",
-        Category = "Misc",
-        Callback = function(state) env_global.NoSlow = state end
-    })
-
-    Core.RegisterFeature("Desync", {
-        Name = "回朔/脫節 (Desync)",
-        Description = "使敵人在其視角中看到你的位置滯後或回朔",
-        Category = "Misc",
-        Callback = function(state) env_global.DesyncEnabled = state end
-    })
-
-    Core.RegisterFeature("Spider", {
-        Name = "蜘蛛爬牆 (Spider)",
-        Category = "Misc",
-        Callback = function(state) env_global.Spider = state end
-    })
-
-    Core.RegisterFeature("Bhop", {
-        Name = "自動連跳 (Bhop)",
-        Category = "Misc",
-        Callback = function(state) env_global.Bhop = state end
-    })
+    -- [[ 效能優化：零件快取 ]]
+    local lavaParts = {}
+    local lastLavaScan = 0
+    local function UpdateLavaParts()
+        if not env_global.LavaNoclip then return end
+        local now = tick()
+        if now - lastLavaScan < 5 then return end -- 每 5 秒掃描一次
+        lastLavaScan = now
+        
+        lavaParts = {}
+        for _, v in ipairs(workspace:GetDescendants()) do
+            if v:IsA("BasePart") then
+                local name = v.Name:lower()
+                if name:find("lava") or name:find("magma") then
+                    table.insert(lavaParts, v)
+                end
+            end
+        end
+    end
 
     -- [[ 移動邏輯核心 ]]
     local charParts = {}
@@ -233,11 +319,19 @@ function Misc.Init(Core)
         if not (hum and hrp) then return end
 
         -- 1. 速度強化 (繞過模式：CFrame + Velocity 混合)
-        if env_global.WalkSpeedEnabled and hum.MoveDirection.Magnitude > 0 then
-            -- 保持屬性值為正常 (16)，但實際移動加快
-            local extraSpeed = (env_global.WalkSpeed - 16)
+        if (env_global.WalkSpeedEnabled or (env_global.SprintEnabled and UserInputService:IsKeyDown(Enum.KeyCode.LeftShift))) and hum.MoveDirection.Magnitude > 0 then
+            local baseSpeed = env_global.WalkSpeedEnabled and env_global.WalkSpeed or 16
+            local multiplier = (env_global.SprintEnabled and UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)) and env_global.SprintMultiplier or 1
+            local targetSpeed = baseSpeed * multiplier
+            
+            local extraSpeed = (targetSpeed - 16)
             if extraSpeed > 0 then
                 hrp.CFrame = hrp.CFrame + (hum.MoveDirection * (extraSpeed * dt))
+            end
+
+            -- 瞬移行走 (TP Walk) 邏輯
+            if env_global.TeleportWalk then
+                hrp.CFrame = hrp.CFrame + (hum.MoveDirection * env_global.TeleportWalkDist)
             end
         end
 
@@ -260,7 +354,7 @@ function Misc.Init(Core)
         end
 
         -- 4. 飛行模式 (Fly)
-        if env_global.FlyEnabled then
+        if env_global.FlyEnabled or env_global.VelocityFly then
             local moveDir = hum.MoveDirection
             local cameraCF = Camera.CFrame
             local flyVel = Vector3.new(0, 0, 0)
@@ -276,7 +370,12 @@ function Misc.Init(Core)
                 flyVel = flyVel + Vector3.new(0, -env_global.FlySpeed, 0)
             end
 
-            hrp.Velocity = flyVel
+            if env_global.VelocityFly then
+                hrp.Velocity = flyVel
+            else
+                hrp.CFrame = hrp.CFrame + (flyVel * dt)
+                hrp.Velocity = Vector3.new(0, 0, 0)
+            end
         end
 
         -- 5. Noclip (穿牆)
@@ -285,6 +384,17 @@ function Misc.Init(Core)
                 local part = charParts[i]
                 if part.Parent then
                     part.CanCollide = false
+                end
+            end
+        end
+
+        -- 5.1 穿過岩漿 (Lava Noclip)
+        if env_global.LavaNoclip then
+            UpdateLavaParts()
+            for i = 1, #lavaParts do
+                local v = lavaParts[i]
+                if v and v.Parent then
+                    v.CanCollide = false
                 end
             end
         end
@@ -400,6 +510,19 @@ function Misc.Init(Core)
                 hum.Died:Connect(function() OnPlayerDied(p) end)
             end
         end)
+    end)
+
+    -- [[ 自動點擊 ]]
+    task.spawn(function()
+        while task.wait() do
+            if env_global.AutoClicker then
+                local VirtualInputManager = game:GetService("VirtualInputManager")
+                VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+                task.wait(0.01)
+                VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+                task.wait(env_global.AutoClickDelay)
+            end
+        end
     end)
 
     print("[Halol] 強化移動模組已啟動")

@@ -5,7 +5,7 @@
 -- [[ 啟動最前端：立即回饋 ]]
 print("========================================")
 print("[Halol] 偵測到執行指令，正在初始化...")
-local CURRENT_VERSION = "1.0.6"
+local CURRENT_VERSION = "1.1.0"
 
 pcall(function()
     game:GetService("StarterGui"):SetCore("SendNotification", {
@@ -163,16 +163,20 @@ local function Main()
         env_global.DisableAdvancedHooks = false        -- 啟用高級 Hook
     end
 
-    -- 並行加載模組群
+    -- [[ 並行加載模組群 ]]
     local Core = LoadModule("src/core.lua")
     if not Core then 
         warn("[Halol Critical] 核心組件 (core.lua) 加載失敗，腳本停止執行。")
         return 
     end
     
+    -- 顯示加載介面
+    local overlay = Core.ShowLoading("HALOL SHOOTING")
+    overlay:Update("正在加載核心組件...", 0.1)
+    
     -- 優先初始化 GUI
     Core.CreateGUI()
-    Core.Notify("Halol", "核心加載成功，正在啟動功能...", 2)
+    overlay:Update("正在加載擴展模組...", 0.3)
     
     local modules = {
         {"Protection", "src/protection.lua"},
@@ -182,13 +186,35 @@ local function Main()
         {"Misc", "src/misc.lua"}
     }
     
+    local loadedCount = 0
+    local totalModules = #modules
+    
     for _, modInfo in ipairs(modules) do
         task.spawn(function()
             local success, mod = pcall(LoadModule, modInfo[2])
             if success and mod and mod.Init then
                 local ok, err = pcall(mod.Init, Core)
-                if not ok then
-                    warn("[Halol] 模組 " .. modInfo[1] .. " 初始化失敗: " .. tostring(err))
+                loadedCount = loadedCount + 1
+                local progress = 0.3 + (loadedCount / totalModules) * 0.7
+                
+                if ok then
+                    overlay:Update("模組 " .. modInfo[1] .. " 加載成功", progress)
+                else
+                    overlay:Update("模組 " .. modInfo[1] .. " 加載失敗", progress)
+                    Core.Error(modInfo[1] .. " 初始化失敗: " .. tostring(err))
+                end
+                
+                if loadedCount == totalModules then
+                    task.wait(0.5)
+                    overlay:Update("所有模組加載完成！", 1)
+                    task.wait(0.5)
+                    overlay:Hide()
+                    Core.Success("Halol Shooting 已就緒！", 5)
+                end
+            else
+                loadedCount = loadedCount + 1
+                if loadedCount == totalModules then
+                    overlay:Hide()
                 end
             end
         end)
