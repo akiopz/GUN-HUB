@@ -733,35 +733,35 @@ function Core.ToggleFeature(id, state)
 end
 
 -- [[ GUI 核心系統 ]]
-function Core.CreateGUI()
-    if Core.MainGui then Core.MainGui:Destroy() end
-    Core.CreateWatermark() -- 啟動水印
+    function Core.CreateGUI()
+        if Core.MainGui then Core.MainGui:Destroy() end
+        Core.CreateWatermark() -- 啟動水印
 
-    local targetParent = Core.gethui()
-    if not targetParent then
-        warn("[Halol Error] 找不到可用的 GUI 容器 (PlayerGui/CoreGui)")
-        return
-    end
+        local targetParent = Core.gethui()
+        if not targetParent then
+            warn("[Halol Error] 找不到可用的 GUI 容器 (PlayerGui/CoreGui)")
+            return
+        end
 
-    local TweenService = Core.TweenService
-    local UserInputService = Core.UserInputService
-    local ScreenGui = Instance.new("ScreenGui")
-    local MainFrame = Instance.new("Frame")
-    local Title = Instance.new("TextLabel")
-    local MinButton = Instance.new("TextButton")
-    local CloseButton = Instance.new("TextButton")
-    local TabContainer = Instance.new("Frame")
-    local FeatureList = Instance.new("ScrollingFrame")
-    local UIListLayout = Instance.new("UIListLayout")
-    local SearchBar = Instance.new("Frame")
-    local SearchInput = Instance.new("TextBox")
+        local TweenService = Core.TweenService
+        local UserInputService = Core.UserInputService
+        local ScreenGui = Instance.new("ScreenGui")
+        local MainFrame = Instance.new("Frame")
+        local Title = Instance.new("TextLabel")
+        local MinButton = Instance.new("TextButton")
+        local CloseButton = Instance.new("TextButton")
+        local TabContainer = Instance.new("Frame")
+        local FeatureList = Instance.new("ScrollingFrame")
+        local UIListLayout = Instance.new("UIListLayout")
+        local SearchBar = Instance.new("Frame")
+        local SearchInput = Instance.new("TextBox")
 
-    ScreenGui.Name = "HalolMainGui"
-    ScreenGui.Parent = targetParent
-    ScreenGui.ResetOnSpawn = false
-    ScreenGui.DisplayOrder = 999
-    ScreenGui.IgnoreGuiInset = true
-    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        ScreenGui.Name = "HalolMainGui"
+        ScreenGui.Parent = targetParent
+        ScreenGui.ResetOnSpawn = false
+        ScreenGui.DisplayOrder = 9999 -- 提高層級
+        ScreenGui.IgnoreGuiInset = true
+        ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global -- 使用 Global ZIndex
 
     MainFrame.Name = "MainFrame"
     MainFrame.Parent = ScreenGui
@@ -910,6 +910,7 @@ function Core.CreateGUI()
     CanvasGroup.Parent = FeatureList
     CanvasGroup.Size = UDim2.new(1, 0, 1, 0)
     CanvasGroup.BackgroundTransparency = 1
+    CanvasGroup.AutomaticSize = Enum.AutomaticSize.Y
     
     UIListLayout.Parent = CanvasGroup
     UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -1001,10 +1002,11 @@ function Core.CreateGUI()
 
     -- 自動更新 CanvasSize
     UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        FeatureList.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y + 10)
+        local contentSize = UIListLayout.AbsoluteContentSize.Y + 10
+        FeatureList.CanvasSize = UDim2.new(0, 0, 0, contentSize)
         local content = FeatureList:FindFirstChild("ContentGroup")
         if content then
-            content.Size = UDim2.new(1, 0, 0, UIListLayout.AbsoluteContentSize.Y + 10)
+            content.Size = UDim2.new(1, 0, 0, contentSize)
         end
     end)
 
@@ -1333,13 +1335,23 @@ function Core.CreateGUI()
     -- 初始化現有功能
     local savedConfig = Core.LoadConfig("default") or {}
     
+    local sortedFeatures = {}
     for id, info in pairs(Core.Features) do
-        Core.UI.AddFeature(id, info)
+        table.insert(sortedFeatures, {id = id, info = info})
     end
+    table.sort(sortedFeatures, function(a, b) return (a.info.Name or a.id) < (b.info.Name or b.id) end)
+
+    for _, feat in ipairs(sortedFeatures) do
+        Core.UI.AddFeature(feat.id, feat.info)
+    end
+    
+    -- 強制刷新一次顯示
+    task.delay(0.5, function() RefreshFeatures() end)
     
     -- 自動開啟選單 (防止隱藏)
     MainFrame.Visible = true
     ScreenGui.Enabled = true
+    MainFrame.ZIndex = 5 -- 確保 MainFrame 有足夠高的 ZIndex
 
     -- [[ 滑鼠解鎖邏輯 ]]
     local function ToggleMouse(visible)
