@@ -1,7 +1,7 @@
 ---@diagnostic disable: undefined-global, undefined-field, deprecated, inject-field
 --[[
     Halol Shooting Suite - Loader (Pure English Version)
-    Version: 1.1.2
+    Version: 1.2.5
     Note: Removed all non-ASCII characters to prevent encoding errors in some executors.
 ]]
 

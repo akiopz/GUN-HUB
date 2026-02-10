@@ -180,6 +180,36 @@ end
         return name, version
     end
 
+    -- [[ 檔案讀寫安全封裝 ]]
+    function Core.SafeReadFile(path)
+        local success, result = pcall(function()
+            return Core.read_file(path)
+        end)
+        if not success then
+            local err = tostring(result)
+            if err:find("Unicode") or err:find("multi-byte") then
+                warn("[Halol Critical] 偵測到編碼錯誤！這通常是因為您的檔案路徑包含中文字符。")
+                warn("[Halol Critical] 請將腳本資料夾重新命名為純英文（例如：ShootingGame）。")
+            end
+            return nil
+        end
+        return result
+    end
+
+    function Core.SafeWriteFile(path, content)
+        local success, result = pcall(function()
+            return Core.write_file(path, content)
+        end)
+        if not success then
+            local err = tostring(result)
+            if err:find("Unicode") or err:find("multi-byte") then
+                warn("[Halol Critical] 檔案寫入失敗：路徑編碼錯誤。請避免在路徑中使用中文。")
+            end
+            return false
+        end
+        return true
+    end
+
     -- [[ 錯誤捕捉系統 (Error Handling) ]]
     function Core.SafeCall(func, ...)
         local success, result = pcall(func, ...)
@@ -204,17 +234,17 @@ end
             local iconLabel = Instance.new("TextLabel")
 
             local accentColor = Color3.fromRGB(0, 150, 255)
-            local icon = "ℹ️"
+            local icon = "[i]"
             
             if type == "success" then
                 accentColor = Color3.fromRGB(0, 255, 100)
-                icon = "✅"
+                icon = "[+]"
             elseif type == "error" then
                 accentColor = Color3.fromRGB(255, 50, 50)
-                icon = "❌"
+                icon = "[!]"
             elseif type == "warning" then
                 accentColor = Color3.fromRGB(255, 200, 0)
-                icon = "⚠️"
+                icon = "[?]"
             end
 
             notifyFrame.Size = UDim2.new(0, 240, 0, 65)
@@ -574,55 +604,6 @@ function Core.CreateWatermark()
 end
 
 -- 安全執行包裹 (含自動通知)
-    function Core.Notify(title, text, duration)
-        local gui = Core.gethui()
-        if not gui then return end
-
-        local notifyFrame = Instance.new("Frame")
-        local titleLabel = Instance.new("TextLabel")
-        local textLabel = Instance.new("TextLabel")
-
-        notifyFrame.Name = "HalolNotify"
-        notifyFrame.Size = UDim2.new(0, 250, 0, 60)
-        notifyFrame.Position = UDim2.new(1, 10, 1, -70)
-        notifyFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-        notifyFrame.BorderSizePixel = 0
-        notifyFrame.Parent = gui
-        Core.AddCorner(notifyFrame)
-        Core.AddStroke(notifyFrame, Color3.fromRGB(0, 150, 255), 2)
-
-        titleLabel.Size = UDim2.new(1, -20, 0, 25)
-        titleLabel.Position = UDim2.new(0, 10, 0, 5)
-        titleLabel.BackgroundTransparency = 1
-        titleLabel.Text = title
-        titleLabel.TextColor3 = Color3.fromRGB(0, 150, 255)
-        titleLabel.TextSize = 14
-        titleLabel.Font = Enum.Font.GothamBold
-        titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-        titleLabel.Parent = notifyFrame
-
-        textLabel.Size = UDim2.new(1, -20, 0, 25)
-        textLabel.Position = UDim2.new(0, 10, 0, 30)
-        textLabel.BackgroundTransparency = 1
-        textLabel.Text = text
-        textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        textLabel.TextSize = 12
-        textLabel.Font = Enum.Font.Gotham
-        textLabel.TextXAlignment = Enum.TextXAlignment.Left
-        textLabel.Parent = notifyFrame
-
-        -- 動畫效果
-        local TweenService = Core.TweenService
-        TweenService:Create(notifyFrame, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position = UDim2.new(1, -260, 1, -70)}):Play()
-        
-        task.delay(duration or 3, function()
-            TweenService:Create(notifyFrame, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Position = UDim2.new(1, 10, 1, -70)}):Play()
-            task.wait(0.5)
-            notifyFrame:Destroy()
-        end)
-    end
-
-    -- 安全執行包裹 (含自動通知)
 function Core.SafeExecute(name, func, ...)
     if type(func) ~= "function" then
         warn("[Halol Error] Attempted to execute non-function: " .. tostring(name))
@@ -652,25 +633,32 @@ function Core.SaveConfig(name, data)
         -- Dirty check: 僅在資料變動時寫入
         if ConfigCache[name or "default"] == json then return end
         
-        if not Core.is_folder("HalolHub") then Core.make_folder("HalolHub") end
-        if not Core.is_folder(ConfigFolder) then Core.make_folder(ConfigFolder) end
+        if not Core.is_folder("HalolHub") then pcall(Core.make_folder, "HalolHub") end
+        if not Core.is_folder(ConfigFolder) then pcall(Core.make_folder, ConfigFolder) end
         
-        Core.write_file(ConfigFolder .. "/" .. (name or "default") .. ".json", json)
+        Core.SafeWriteFile(ConfigFolder .. "/" .. (name or "default") .. ".json", json)
         ConfigCache[name or "default"] = json
     end)
 end
 
 function Core.LoadConfig(name)
     local path = ConfigFolder .. "/" .. (name or "default") .. ".json"
-    if Core.is_file(path) then
-        local ok, data = pcall(function()
-            local content = Core.read_file(path)
-            ConfigCache[name or "default"] = content
-            return Core.HttpService:JSONDecode(content)
-        end)
-        if ok then 
-            Core.CurrentConfig = data
-            return data 
+    
+    -- 先嘗試檢查檔案是否存在，同樣使用 pcall 保護
+    local exists = false
+    pcall(function() exists = Core.is_file(path) end)
+    
+    if exists then
+        local content = Core.SafeReadFile(path)
+        if content then
+            local ok, data = pcall(function()
+                return Core.HttpService:JSONDecode(content)
+            end)
+            if ok then 
+                Core.CurrentConfig = data
+                ConfigCache[name or "default"] = content
+                return data 
+            end
         end
     end
     return nil
@@ -693,15 +681,15 @@ end
 Core.Features = {}
 Core.Categories = {"All", "Favorites", "Rage", "Combat", "Visuals", "World", "Misc", "Protection", "Config"}
 Core.CategoryIcons = {
-    All = "🏠",
-    Favorites = "⭐",
-    Rage = "🔥",
-    Combat = "🎯",
-    Visuals = "👁️",
-    World = "🌍",
-    Misc = "⚙️",
-    Protection = "🛡️",
-    Config = "💾"
+    All = "Home",
+    Favorites = "Star",
+    Rage = "Rage",
+    Combat = "Aim",
+    Visuals = "ESP",
+    World = "World",
+    Misc = "Misc",
+    Protection = "Prot",
+    Config = "Save"
 }
 
 function Core.RegisterFeature(id, info)
@@ -781,9 +769,9 @@ end
     end
 
     -- 獲取版本號
-    local version = "v1.2.3"
+    local version = "v1.2.5"
     pcall(function()
-        local v = readfile("HalolHub/version.txt")
+        local v = readfile("version.txt") or readfile("HalolHub/version.txt")
         if v then version = "v" .. v:gsub("%s+", "") end
     end)
 

@@ -5,7 +5,7 @@
 -- [[ 啟動最前端：立即回饋 ]]
 print("========================================")
 print("[Halol] 偵測到執行指令，正在初始化...")
-local CURRENT_VERSION = "1.2.4"
+local CURRENT_VERSION = "1.2.5"
 
 pcall(function()
     game:GetService("StarterGui"):SetCore("SendNotification", {
@@ -107,7 +107,10 @@ local function LoadModule(path)
                 pcall(function()
                     if not isfolder("HalolHub") then makefolder("HalolHub") end
                     if not isfolder("HalolHub/src") then makefolder("HalolHub/src") end
-                    writefile("HalolHub/" .. path, res) 
+                    local success, err = pcall(writefile, "HalolHub/" .. path, res)
+                    if not success then
+                        warn("[Halol Error] 本地緩存寫入失敗 (路徑可能包含中文): " .. tostring(err))
+                    end
                 end)
             end
         else
