@@ -5,14 +5,15 @@
 local Combat = {}
 
 function Combat.Init(Core)
-    ---@class GlobalEnv
-    local env_global = (getgenv or function() return _G end)() --[[@as GlobalEnv]]
+    local get_genv = Core.get_genv or getgenv
+    local env_global = get_genv() --[[@as GlobalEnv]]
+    
     local lp = Core.LocalPlayer
     local Camera = Core.Camera
     local Players = Core.Players
     local UserInputService = Core.UserInputService
     local RunService = Core.RunService
-    local TweenService = game:GetService("TweenService")
+    local TweenService = Core.TweenService
     local CollectionService = game:GetService("CollectionService")
 
     -- [[ 性能優化：快取常用函數 ]]
@@ -120,8 +121,41 @@ function Combat.Init(Core)
     env_global.BulletPathEnabled = env_global.BulletPathEnabled or false
     env_global.BulletPathColor = env_global.BulletPathColor or Color3.fromRGB(255, 0, 0)
     env_global.BulletPathDuration = env_global.BulletPathDuration or 1
+    env_global.AutoWeaponDetection = env_global.AutoWeaponDetection or true
+    env_global.CurrentWeaponName = "None"
 
     -- [[ 註冊功能 ]]
+    Core.RegisterFeature("AutoWeaponDetection", {
+        Name = "自動偵測槍枝 (Auto Detect)",
+        Description = "自動偵測當前手持槍枝並顯示資訊",
+        Category = "Combat",
+        Callback = function(state) env_global.AutoWeaponDetection = state end
+    })
+
+    -- [[ 武器偵測循環 ]]
+    task.spawn(function()
+        local lastWeapon = nil
+        while task.wait(0.5) do
+            if env_global.AutoWeaponDetection then
+                local weapon = GetCurrentWeapon()
+                if weapon ~= lastWeapon then
+                    lastWeapon = weapon
+                    if weapon then
+                        env_global.CurrentWeaponName = weapon.Name
+                        Core.Notify("槍枝偵測", "當前裝備: " .. weapon.Name, 2)
+                        
+                        -- 智慧調整：如果是狙擊槍，自動優化相關設定 (可選)
+                        if IsSniper(weapon) then
+                            -- 例如：如果是狙擊槍，可以自動開啟某些適合狙擊的設定
+                            -- env_global.AimbotSmoothness = 0.2
+                        end
+                    else
+                        env_global.CurrentWeaponName = "None"
+                    end
+                end
+            end
+        end
+    end)
     Core.RegisterFeature("TeleportKill", {
         Name = "傳送殺敵 (TP Kill)",
         Category = "Rage",

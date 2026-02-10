@@ -144,23 +144,26 @@ local function Main()
         print("[Halol] 發現新版本 " .. newVersion .. "，正在執行同步更新...")
     end
 
+    -- [[ 跨執行器兼容性配置 ]]
     local executor = "Unknown"
-    pcall(function() executor = (identifyexecutor or getexecutorname)() end)
+    pcall(function() executor = (identifyexecutor or getexecutorname or function() return "Unknown" end)() end)
     print("[Halol] 當前執行器: " .. tostring(executor))
     
-    -- [[ Zeus 專屬優化設定 ]]
-    if tostring(executor):find("Zeus") then
-        env_global.DisableAdvancedHooks = true -- Zeus 環境下 Hook 較不穩定，預設關閉
-        env_global.AntiCheatBypass = false     -- 減少激進的繞過行為，優先保證不崩潰
-        print("[Halol] 已套用 Zeus 穩定性優化配置")
-    end
+    -- [[ 自動優化配置 (Universal Optimization) ]]
     env_global.FastMode = true
     env_global.OptimizeMemory = true
+
+    if tostring(executor):find("Solara") or tostring(executor):find("Zeus") or tostring(executor):find("Oxygen") then
+        env_global.DisableAdvancedHooks = true -- 這些執行器對 Hook 支援較弱
+        env_global.AntiCheatBypass = false     
+        print("[Halol] 已套用 " .. tostring(executor) .. " 穩定性優化配置")
+    end
     
-    -- 針對各類執行器預設最穩配置
     if not env_global.ManualConfig then
-        env_global.DisableAggressiveProtection = false -- 啟用強化保護
-        env_global.DisableAdvancedHooks = false        -- 啟用高級 Hook
+        env_global.DisableAggressiveProtection = false -- 預設啟用保護
+        if env_global.DisableAdvancedHooks == nil then
+            env_global.DisableAdvancedHooks = false
+        end
     end
 
     -- [[ 並行加載模組群 ]]

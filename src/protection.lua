@@ -2,13 +2,13 @@
 local Protection = {}
 
 function Protection.Init(Core)
-    local getgenv = Core.getgenv or getgenv
+    local get_genv = Core.get_genv or getgenv
     local getnamecallmethod = Core.getnamecallmethod or getnamecallmethod
     local game = Core.game or game
     local workspace = Core.workspace or workspace
     local tick = Core.tick or tick
 
-    local env_global = (getgenv or function() return _G end)() --[[@as GlobalEnv]]
+    local env_global = get_genv() --[[@as GlobalEnv]]
     
     -- [[ 配置初始化 ]]
     env_global.GodModeEnabled = env_global.GodModeEnabled or false
@@ -39,14 +39,16 @@ function Protection.Init(Core)
 
     -- [[ 強化反腳本掃描與偽造 ]]
     local function SecureEnvironment()
+        if env_global.DisableAdvancedHooks then return end
+
         local hookmetamethod = Core.hookmetamethod
         local hookfunction = Core.hookfunction
         local newcclosure = Core.newcclosure
         local checkcaller = Core.checkcaller
-        local islclosure = env_global.islclosure or function(f) return type(f) == "function" end
+        local islclosure = Core.islclosure or function(f) return type(f) == "function" end
         local getinfo = debug.info
-        local setreadonly = Core.setreadonly or setreadonly
-        local getrawmetatable = Core.getrawmetatable or getrawmetatable
+        local setreadonly = env_global.setreadonly or (make_writeable and function(t, v) if v then make_writeable(t) else make_readonly(t) end end)
+        local getrawmetatable = env_global.getrawmetatable or (getgenv and getgenv().getrawmetatable)
         
         if not hookmetamethod then return end
 

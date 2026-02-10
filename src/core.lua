@@ -12,6 +12,15 @@ local env_global = getgenv() --[[@as GlobalEnv]]
 Core.game = game
 Core.workspace = workspace
 Core.tick = tick
+Core.HttpService = game:GetService("HttpService")
+Core.RunService = game:GetService("RunService")
+Core.UserInputService = game:GetService("UserInputService")
+Core.TweenService = game:GetService("TweenService")
+Core.Players = game:GetService("Players")
+Core.LocalPlayer = Core.Players.LocalPlayer
+Core.Camera = workspace.CurrentCamera
+
+-- [[ 跨執行器兼容性層 (Universal Compatibility Layer) ]]
 Core.load_func = (env_global.loadstring or env_global.load or loadstring or load)
 Core.hookmetamethod = env_global.hookmetamethod or (getgenv and getgenv().hookmetamethod)
 Core.newcclosure = env_global.newcclosure or (getgenv and getgenv().newcclosure) or function(f) return f end
@@ -21,24 +30,29 @@ Core.hookfunction = env_global.hookfunction or (getgenv and getgenv().hookfuncti
 Core.islclosure = env_global.islclosure or function(f) return type(f) == "function" end
 Core.cloneref = env_global.cloneref or function(s) return s end
 Core.Drawing = env_global.Drawing or (getgenv and getgenv().Drawing)
+Core.request = (env_global.request or env_global.http_request or (http and http.request) or syn and syn.request)
+Core.set_clipboard = (env_global.setclipboard or env_global.set_clipboard or (syn and syn.set_clipboard))
+Core.get_genv = (getgenv or function() return _G end)
 
+-- [[ 智能 GUI 容器獲取 (Smart GUI Container) ]]
 Core.gethui = function()
-    -- 針對 Solara 等執行器的優化：優先嘗試 PlayerGui
-    local lp = game:GetService("Players").LocalPlayer
-    local playerGui = lp and lp:FindFirstChild("PlayerGui")
-    
-    if playerGui then
-        print("[Halol] 使用 PlayerGui 作為 GUI 容器 (對 Solara 更穩定)")
-        return playerGui
-    end
-
+    -- 針對 Solara/Wave/Oxygen 等執行器的優化
     local success, res = pcall(function() return env_global.gethui and env_global.gethui() end)
     if success and res then return res end
+    
     success, res = pcall(function() return game:GetService("CoreGui") end)
     if success and res then return res end
     
+    -- 如果 CoreGui 無法存取，嘗試 PlayerGui (Solara 常用)
+    local lp = Core.LocalPlayer
+    local playerGui = lp and lp:FindFirstChild("PlayerGui")
+    if playerGui then
+        return playerGui
+    end
+    
     return nil
 end
+
 Core.identifyexecutor = env_global.identifyexecutor or env_global.getexecutorname or function() return "Unknown" end
 Core.read_file = env_global.readfile or function(...) return nil end
 Core.write_file = env_global.writefile or function(...) return false end
@@ -46,6 +60,13 @@ Core.is_file = env_global.isfile or function(...) return false end
 Core.is_folder = env_global.isfolder or function(...) return false end
 Core.make_folder = env_global.makefolder or function(...) return false end
 Core.list_files = env_global.listfiles or function(...) return {} end
+
+-- [[ 針對特定執行器的自動優化 ]]
+local executor = Core.identifyexecutor()
+if tostring(executor):find("Solara") or tostring(executor):find("Zeus") then
+    env_global.DisableAdvancedHooks = true 
+    print("[Halol] 已針對 " .. tostring(executor) .. " 套用穩定性優化")
+end
 
     -- [[ 啟動加載界面 (Loading Overlay) ]]
     local LoadingOverlay = nil
@@ -511,7 +532,9 @@ function Core.CreateWatermark()
         local fps = math.floor(1/dt)
         local ping = 0
         pcall(function() ping = math.floor(Core.LocalPlayer:GetNetworkPing() * 1000) end)
-        text.Text = string.format("Halol GUN-HUB | FPS: %d | Ping: %dms", fps, ping)
+        
+        local weaponText = env_global.CurrentWeaponName or "None"
+        text.Text = string.format("Halol GUN-HUB | FPS: %d | Ping: %dms | 武器: %s", fps, ping, weaponText)
         
         -- 動態調整寬度
         local textBounds = text.TextBounds.X
