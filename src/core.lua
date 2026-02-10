@@ -497,7 +497,35 @@ end
 
 function Core.AddGradient(parent, colors)
     local gradient = Instance.new("UIGradient")
-    gradient.Color = ColorSequence.new(colors)
+    
+    -- 確保 colors 是正確的格式
+    local sequence
+    if typeof(colors) == "Color3" then
+        sequence = ColorSequence.new(colors)
+    elseif typeof(colors) == "table" then
+        -- 如果是普通的 Color3 table，轉換為 Keypoints
+        if #colors > 0 and typeof(colors[1]) == "Color3" then
+            local keypoints = {}
+            for i, c in ipairs(colors) do
+                table.insert(keypoints, ColorSequenceKeypoint.new((i-1)/(#colors-1), c))
+            end
+            sequence = ColorSequence.new(keypoints)
+        else
+            -- 假設已經是 Keypoints table
+            local success, res = pcall(function() return ColorSequence.new(colors) end)
+            if success then
+                sequence = res
+            else
+                sequence = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+            end
+        end
+    elseif typeof(colors) == "ColorSequence" then
+        sequence = colors
+    else
+        sequence = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+    end
+    
+    gradient.Color = sequence
     gradient.Rotation = 90
     gradient.Parent = parent
     return gradient
@@ -829,20 +857,11 @@ function Core.CreateGUI()
     CloseButton.MouseButton1Click:Connect(function()
         ScreenGui:Destroy()
     end)
+
     Core.AddGradient(Title, {
-        ColorStack = {
-            ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 150, 255)),
-            ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 80, 200))
-        }
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 150, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 80, 200))
     })
-    -- 修正上面的 Gradient 參數，傳入正確的 ColorSequence
-    local titleGradient = Title:FindFirstChildOfClass("UIGradient")
-    if titleGradient then
-        titleGradient.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 150, 255)),
-            ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 80, 200))
-        })
-    end
 
     TabContainer.Name = "TabContainer"
     TabContainer.Parent = MainFrame
