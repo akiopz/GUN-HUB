@@ -520,6 +520,55 @@ function Core.CreateWatermark()
 end
 
 -- 安全執行包裹 (含自動通知)
+    function Core.Notify(title, text, duration)
+        local gui = Core.gethui()
+        if not gui then return end
+
+        local notifyFrame = Instance.new("Frame")
+        local titleLabel = Instance.new("TextLabel")
+        local textLabel = Instance.new("TextLabel")
+
+        notifyFrame.Name = "HalolNotify"
+        notifyFrame.Size = UDim2.new(0, 250, 0, 60)
+        notifyFrame.Position = UDim2.new(1, 10, 1, -70)
+        notifyFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+        notifyFrame.BorderSizePixel = 0
+        notifyFrame.Parent = gui
+        Core.AddCorner(notifyFrame)
+        Core.AddStroke(notifyFrame, Color3.fromRGB(0, 150, 255), 2)
+
+        titleLabel.Size = UDim2.new(1, -20, 0, 25)
+        titleLabel.Position = UDim2.new(0, 10, 0, 5)
+        titleLabel.BackgroundTransparency = 1
+        titleLabel.Text = title
+        titleLabel.TextColor3 = Color3.fromRGB(0, 150, 255)
+        titleLabel.TextSize = 14
+        titleLabel.Font = Enum.Font.GothamBold
+        titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+        titleLabel.Parent = notifyFrame
+
+        textLabel.Size = UDim2.new(1, -20, 0, 25)
+        textLabel.Position = UDim2.new(0, 10, 0, 30)
+        textLabel.BackgroundTransparency = 1
+        textLabel.Text = text
+        textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        textLabel.TextSize = 12
+        textLabel.Font = Enum.Font.Gotham
+        textLabel.TextXAlignment = Enum.TextXAlignment.Left
+        textLabel.Parent = notifyFrame
+
+        -- 動畫效果
+        local TweenService = Core.TweenService
+        TweenService:Create(notifyFrame, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position = UDim2.new(1, -260, 1, -70)}):Play()
+        
+        task.delay(duration or 3, function()
+            TweenService:Create(notifyFrame, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Position = UDim2.new(1, 10, 1, -70)}):Play()
+            task.wait(0.5)
+            notifyFrame:Destroy()
+        end)
+    end
+
+    -- 安全執行包裹 (含自動通知)
 function Core.SafeExecute(name, func, ...)
     if type(func) ~= "function" then
         warn("[Halol Error] Attempted to execute non-function: " .. tostring(name))
@@ -641,6 +690,7 @@ function Core.CreateGUI()
     end
 
     local TweenService = Core.TweenService
+    local UserInputService = Core.UserInputService
     local ScreenGui = Instance.new("ScreenGui")
     local MainFrame = Instance.new("Frame")
     local Title = Instance.new("TextLabel")
@@ -883,8 +933,10 @@ function Core.CreateGUI()
             
             -- 分頁動畫
             FeatureList.CanvasPosition = Vector2.new(0, 0)
-            FeatureList.GroupTransparency = 1
-            TweenService:Create(FeatureList, TweenInfo.new(0.3), {GroupTransparency = 0}):Play()
+            if CanvasGroup then
+                CanvasGroup.GroupTransparency = 1
+                TweenService:Create(CanvasGroup, TweenInfo.new(0.3), {GroupTransparency = 0}):Play()
+            end
             
             for _, otherBtn in ipairs(TabContainer:GetChildren()) do
                 if otherBtn:IsA("TextButton") then
