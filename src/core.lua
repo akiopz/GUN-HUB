@@ -769,7 +769,7 @@ end
     end
 
     -- 獲取版本號
-    local version = "v1.2.5"
+    local version = "v1.2.6"
     pcall(function()
         local v = readfile("version.txt") or readfile("HalolHub/version.txt")
         if v then version = "v" .. v:gsub("%s+", "") end
