@@ -641,7 +641,7 @@ function Core.SafeExecute(name, func, ...)
 end
 
 -- [[ 配置管理系統優化 ]]
-local ConfigFolder = "射擊類/configs"
+local ConfigFolder = "HalolHub/configs"
 local ConfigCache = {}
 Core.CurrentConfig = {}
 
@@ -652,7 +652,7 @@ function Core.SaveConfig(name, data)
         -- Dirty check: 僅在資料變動時寫入
         if ConfigCache[name or "default"] == json then return end
         
-        if not Core.is_folder("射擊類") then Core.make_folder("射擊類") end
+        if not Core.is_folder("HalolHub") then Core.make_folder("HalolHub") end
         if not Core.is_folder(ConfigFolder) then Core.make_folder(ConfigFolder) end
         
         Core.write_file(ConfigFolder .. "/" .. (name or "default") .. ".json", json)
@@ -783,7 +783,7 @@ end
     -- 獲取版本號
     local version = "v1.2.3"
     pcall(function()
-        local v = readfile("射擊類/version.txt")
+        local v = readfile("HalolHub/version.txt")
         if v then version = "v" .. v:gsub("%s+", "") end
     end)
 

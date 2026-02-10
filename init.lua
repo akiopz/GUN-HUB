@@ -5,7 +5,7 @@
 -- [[ 啟動最前端：立即回饋 ]]
 print("========================================")
 print("[Halol] 偵測到執行指令，正在初始化...")
-local CURRENT_VERSION = "1.2.3"
+local CURRENT_VERSION = "1.2.4"
 
 pcall(function()
     game:GetService("StarterGui"):SetCore("SendNotification", {
@@ -77,9 +77,9 @@ local function LoadModule(path)
     -- 1. 智能路徑偵測 (僅在非強制更新時)
     if not FORCE_UPDATE then
         local possiblePaths = {
-            "射擊類/" .. path,
+            "HalolHub/" .. path,
             path,
-            "workspace/射擊類/" .. path,
+            "workspace/HalolHub/" .. path,
             "../" .. path
         }
         
@@ -105,9 +105,9 @@ local function LoadModule(path)
             content = res
             if writefile then 
                 pcall(function()
-                    if not isfolder("射擊類") then makefolder("射擊類") end
-                    if not isfolder("射擊類/src") then makefolder("射擊類/src") end
-                    writefile("射擊類/" .. path, res) 
+                    if not isfolder("HalolHub") then makefolder("HalolHub") end
+                    if not isfolder("HalolHub/src") then makefolder("HalolHub/src") end
+                    writefile("HalolHub/" .. path, res) 
                 end)
             end
         else
