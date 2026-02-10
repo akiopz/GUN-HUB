@@ -496,39 +496,42 @@ function Core.AddStroke(parent, color, thickness)
 end
 
 function Core.AddGradient(parent, colors)
-    local gradient = Instance.new("UIGradient")
-    
-    -- 確保 colors 是正確的格式
-    local sequence
-    if typeof(colors) == "Color3" then
-        sequence = ColorSequence.new(colors)
-    elseif typeof(colors) == "table" then
-        -- 如果是普通的 Color3 table，轉換為 Keypoints
-        if #colors > 0 and typeof(colors[1]) == "Color3" then
-            local keypoints = {}
-            for i, c in ipairs(colors) do
-                table.insert(keypoints, ColorSequenceKeypoint.new((i-1)/(#colors-1), c))
-            end
-            sequence = ColorSequence.new(keypoints)
-        else
-            -- 假設已經是 Keypoints table
-            local success, res = pcall(function() return ColorSequence.new(colors) end)
-            if success then
-                sequence = res
+    local success, gradient = pcall(function()
+        local g = Instance.new("UIGradient")
+        local sequence
+        
+        if typeof(colors) == "ColorSequence" then
+            sequence = colors
+        elseif typeof(colors) == "Color3" then
+            sequence = ColorSequence.new(colors)
+        elseif typeof(colors) == "table" then
+            if #colors >= 2 then
+                -- 檢查是否已經是 Keypoints
+                if typeof(colors[1]) == "ColorSequenceKeypoint" then
+                    sequence = ColorSequence.new(colors)
+                else
+                    -- 轉換 Color3 table 為 Keypoints
+                    local kps = {}
+                    for i, c in ipairs(colors) do
+                        table.insert(kps, ColorSequenceKeypoint.new((i-1)/(#colors-1), typeof(c) == "Color3" and c or Color3.new(1,1,1)))
+                    end
+                    sequence = ColorSequence.new(kps)
+                end
+            elseif #colors == 1 then
+                sequence = ColorSequence.new(typeof(colors[1]) == "Color3" and colors[1] or Color3.new(1,1,1))
             else
-                sequence = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+                sequence = ColorSequence.new(Color3.new(1,1,1))
             end
+        else
+            sequence = ColorSequence.new(Color3.new(1,1,1))
         end
-    elseif typeof(colors) == "ColorSequence" then
-        sequence = colors
-    else
-        sequence = ColorSequence.new(Color3.fromRGB(255, 255, 255))
-    end
-    
-    gradient.Color = sequence
-    gradient.Rotation = 90
-    gradient.Parent = parent
-    return gradient
+        
+        g.Color = sequence
+        g.Rotation = 90
+        g.Parent = parent
+        return g
+    end)
+    return success and gradient or nil
 end
 
 -- [[ 水印系統 ]]
@@ -859,8 +862,8 @@ function Core.CreateGUI()
     end)
 
     Core.AddGradient(Title, {
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 150, 255)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 80, 200))
+        Color3.fromRGB(0, 150, 255),
+        Color3.fromRGB(0, 80, 200)
     })
 
     TabContainer.Name = "TabContainer"
