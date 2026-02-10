@@ -738,7 +738,7 @@ end
         local Title = Instance.new("TextLabel")
         local MinButton = Instance.new("TextButton")
         local CloseButton = Instance.new("TextButton")
-        local TabContainer = Instance.new("Frame")
+        local TabContainer = Instance.new("ScrollingFrame")
         local FeatureList = Instance.new("ScrollingFrame")
         local UIListLayout = Instance.new("UIListLayout")
         local SearchBar = Instance.new("Frame")
