@@ -780,12 +780,19 @@ end
         MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
 
+    -- 獲取版本號
+    local version = "v1.2.3"
+    pcall(function()
+        local v = readfile("射擊類/version.txt")
+        if v then version = "v" .. v:gsub("%s+", "") end
+    end)
+
     Title.Name = "Title"
     Title.Parent = MainFrame
     Title.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
     Title.Size = UDim2.new(1, 0, 0, 35)
     Title.Font = Enum.Font.GothamBold
-    Title.Text = "  Halol GUN-HUB v1.2.0"
+    Title.Text = "  Halol GUN-HUB " .. version
     Title.TextColor3 = Color3.fromRGB(255, 255, 255)
     Title.TextSize = 14
     Title.TextXAlignment = Enum.TextXAlignment.Left
@@ -871,6 +878,9 @@ end
     TabContainer.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
     TabContainer.Position = UDim2.new(0, 0, 0, 35)
     TabContainer.Size = UDim2.new(0, 110, 1, -35)
+    TabContainer.ScrollBarThickness = 0 -- 隱藏捲軸但允許捲動
+    TabContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
+    TabContainer.BorderSizePixel = 0
     Core.AddCorner(TabContainer, UDim.new(0, 8))
 
     SearchBar.Name = "SearchBar"
@@ -904,15 +914,7 @@ end
     FeatureList.BorderSizePixel = 0
     FeatureList.ScrollBarImageColor3 = Color3.fromRGB(0, 150, 255)
 
-    -- 確保 ScrollingFrame 支援 GroupTransparency
-    local CanvasGroup = Instance.new("CanvasGroup")
-    CanvasGroup.Name = "ContentGroup"
-    CanvasGroup.Parent = FeatureList
-    CanvasGroup.Size = UDim2.new(1, 0, 1, 0)
-    CanvasGroup.BackgroundTransparency = 1
-    CanvasGroup.AutomaticSize = Enum.AutomaticSize.Y
-    
-    UIListLayout.Parent = CanvasGroup
+    UIListLayout.Parent = FeatureList
     UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
     UIListLayout.Padding = UDim.new(0, 5)
 
@@ -921,8 +923,7 @@ end
 
     -- 分類按鈕與過濾邏輯
     local function RefreshFeatures()
-        local content = FeatureList:FindFirstChild("ContentGroup") or FeatureList
-        for _, child in ipairs(content:GetChildren()) do
+        for _, child in ipairs(FeatureList:GetChildren()) do
             if child:IsA("Frame") then 
                 local featCat = child:GetAttribute("Category")
                 local featName = child:GetAttribute("DisplayName") or child.Name
@@ -944,6 +945,10 @@ end
     local tabLayout = Instance.new("UIListLayout")
     tabLayout.Parent = TabContainer
     tabLayout.Padding = UDim.new(0, 2)
+    
+    tabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        TabContainer.CanvasSize = UDim2.new(0, 0, 0, tabLayout.AbsoluteContentSize.Y + 5)
+    end)
 
     for _, cat in ipairs(Core.Categories) do
         local btn = Instance.new("TextButton")
@@ -978,13 +983,11 @@ end
             currentCategory = cat
             
             -- 分頁動畫
-            FeatureList.CanvasPosition = Vector2.new(0, 0)
-            if CanvasGroup then
-                CanvasGroup.GroupTransparency = 1
-                TweenService:Create(CanvasGroup, TweenInfo.new(0.3), {GroupTransparency = 0}):Play()
-            end
-            
-            for _, otherBtn in ipairs(TabContainer:GetChildren()) do
+    FeatureList.CanvasPosition = Vector2.new(0, 0)
+    FeatureList.ScrollBarImageTransparency = 1
+    TweenService:Create(FeatureList, TweenInfo.new(0.3), {ScrollBarImageTransparency = 0}):Play()
+    
+    for _, otherBtn in ipairs(TabContainer:GetChildren()) do
                 if otherBtn:IsA("TextButton") then
                     TweenService:Create(otherBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(45, 45, 50), TextColor3 = Color3.fromRGB(200, 200, 200)}):Play()
                 end
@@ -1004,17 +1007,12 @@ end
     UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         local contentSize = UIListLayout.AbsoluteContentSize.Y + 10
         FeatureList.CanvasSize = UDim2.new(0, 0, 0, contentSize)
-        local content = FeatureList:FindFirstChild("ContentGroup")
-        if content then
-            content.Size = UDim2.new(1, 0, 0, contentSize)
-        end
     end)
 
     -- 新增功能按鈕的函數
     Core.UI = {}
     
     function Core.UI.AddFeature(id, info)
-        local content = FeatureList:FindFirstChild("ContentGroup") or FeatureList
         local frame = Instance.new("Frame")
         local label = Instance.new("TextLabel")
         local toggle = Instance.new("TextButton")
@@ -1022,7 +1020,7 @@ end
         local toggleCircle = Instance.new("Frame")
 
         frame.Name = id
-        frame.Parent = content
+        frame.Parent = FeatureList
         frame.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
         frame.Size = UDim2.new(1, -5, 0, 35)
         frame.BorderSizePixel = 0
@@ -1090,7 +1088,6 @@ end
     end
 
     function Core.UI.AddDropdown(id, info)
-        local content = FeatureList:FindFirstChild("ContentGroup") or FeatureList
         local frame = Instance.new("Frame")
         local label = Instance.new("TextLabel")
         local dropBtn = Instance.new("TextButton")
@@ -1102,7 +1099,7 @@ end
         local isOpen = false
 
         frame.Name = id
-        frame.Parent = content
+        frame.Parent = FeatureList
         frame.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
         frame.Size = UDim2.new(1, -5, 0, 40)
         frame.BorderSizePixel = 0
@@ -1181,7 +1178,6 @@ end
     end
 
     function Core.UI.AddSlider(id, info)
-        local content = FeatureList:FindFirstChild("ContentGroup") or FeatureList
         local frame = Instance.new("Frame")
         local label = Instance.new("TextLabel")
         local sliderBG = Instance.new("Frame")
@@ -1194,7 +1190,7 @@ end
         local current = default
 
         frame.Name = id
-        frame.Parent = content
+        frame.Parent = FeatureList
         frame.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
         frame.Size = UDim2.new(1, -5, 0, 45)
         frame.BorderSizePixel = 0
@@ -1267,7 +1263,6 @@ end
     end
 
     function Core.UI.AddColorPicker(id, info)
-        local content = FeatureList:FindFirstChild("ContentGroup") or FeatureList
         local frame = Instance.new("Frame")
         local label = Instance.new("TextLabel")
         local colorDisplay = Instance.new("TextButton")
@@ -1276,7 +1271,7 @@ end
         local current = default
 
         frame.Name = id
-        frame.Parent = content
+        frame.Parent = FeatureList
         frame.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
         frame.Size = UDim2.new(1, -5, 0, 35)
         frame.BorderSizePixel = 0
