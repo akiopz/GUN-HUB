@@ -770,10 +770,7 @@ end
 
     -- 獲取版本號
     local version = "v1.2.6"
-    pcall(function()
-        local v = readfile("version.txt") or readfile("HalolHub/version.txt")
-        if v then version = "v" .. v:gsub("%s+", "") end
-    end)
+    -- 移除自動從本地文件讀取版本，避免版本衝突
 
     Title.Name = "Title"
     Title.Parent = MainFrame
